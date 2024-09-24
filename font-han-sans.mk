@@ -7,13 +7,11 @@ include Mk/*.mk
 han-sans.git?=	https://github.com/adobe-fonts/source-han-sans
 han-sans.dir?=	source-han-sans
 
-all::	han-sans.git
-
 # override C (experimental)
-FAM?=	M
+FAM?=	G
 CN?=	JP
 SANS?=	SourceHanSans
-M?=	${SANS}${CN}
+G?=	${SANS}${CN}
 
 OTF?=	${han-sans.dir}/Regular/${SANS}${CN}-Regular.otf \
 	${han-sans.dir}/Bold/${SANS}${CN}-Bold.otf
@@ -23,6 +21,9 @@ all::	${OTF}
 ${OTF}:	han-sans.git afdko.pip
 	$(call build-han,${SANS},.${CN},.SUBSET)
 
-VPATH+=	$(dir ${OTF})
+clean::
+	rm -f $(addsuffix .afm,$(basename $(notdir ${OTF})))
+	rm -f han-sans.git
 
+VPATH+=	$(dir ${OTF})
 include font-common-han.mk

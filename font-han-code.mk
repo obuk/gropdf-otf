@@ -7,8 +7,6 @@ include Mk/*.mk
 han-code-jp.git?=	https://github.com/adobe-fonts/source-han-code-jp
 han-code-jp.dir?=	source-han-code-jp
 
-all::	han-code-jp.git
-
 # override C (experimental)
 FAM?=	Code
 STY?=	R I B BI
@@ -23,6 +21,10 @@ all::	${OTF}
 
 ${OTF}:	han-code-jp.git afdko.pip
 	$(call build-han,${CODE},,,_fs)
+
+clean::
+	rm -f $(addsuffix .afm,$(basename $(notdir ${OTF})))
+	rm -f han-code-jp.git
 
 VPATH+=	$(dir ${OTF})
 

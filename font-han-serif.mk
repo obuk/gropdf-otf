@@ -7,8 +7,6 @@ include Mk/*.mk
 han-serif.git?=	https://github.com/adobe-fonts/source-han-serif
 han-serif.dir?=	source-han-serif
 
-all::	han-serif.git
-
 # override C (experimental)
 FAM?=	M
 CN?=	JP
@@ -23,6 +21,9 @@ all::	${OTF}
 ${OTF}:	han-serif.git afdko.pip
 	$(call build-han,${SERIF},.${CN},.SUBSET)
 
-VPATH+=	$(dir ${OTF})
+clean::
+	rm -f $(addsuffix .afm,$(basename $(notdir ${OTF})))
+	rm -f han-serif.git
 
+VPATH+=	$(dir ${OTF})
 include font-common-han.mk
