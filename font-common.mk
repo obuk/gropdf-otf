@@ -120,4 +120,4 @@ clean-download::
 	rm -f download
 
 %.afm:		%.otf afdko.pip
-	tx -afm $< >$@
+	bash -lc 'tx -afm $< ' >$@
