@@ -35,7 +35,7 @@ clean::
 	rm -f *.stamp
 	rm -f *~
 
-install::
+install::	all
 
 
 # sample
