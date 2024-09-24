@@ -4,7 +4,7 @@ PYTHON_VERSION?=	3.10.12
 %.pip:	pyenv
 	@if [ ! -f $@ ]; then \
 	  echo pip install $*; \
-	  pip install $*; \
+	  bash -lc 'pip install $*'; \
 	  touch $@; \
 	fi
 
@@ -20,7 +20,7 @@ pyenv.repo:	git.pkg
 pyenv.profile?=	/tmp/dot.profile
 
 pyenv.profile:	pyenv.repo
-	@if ! bash -lc pyenv >/dev/null 2>/dev/null; then \
+	@if ! bash -lc 'pyenv version' >/dev/null 2>/dev/null; then \
 	  >${$@}; \
 	  if [ -z "`bash -lc 'printenv PYENV_ROOT'`" ]; then \
 	    echo 'export PYENV_ROOT="${pyenv.dir}"' | \
