@@ -5184,7 +5184,7 @@ my %AGL_to_unicode = (
 );
 
 my $prog = $0;
-my $groff_sys_fontdir = "/usr/local/share/groff/1.23.0/font";
+my $groff_sys_fontdir = "/usr/local/share/groff/current/font";
 my $want_help;
 my $space_width = 0;
 

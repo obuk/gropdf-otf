@@ -7,9 +7,8 @@ usage:
 include Mk/*.mk
 
 groff.git?=	https://git.savannah.gnu.org/git/groff.git
-#groff.git?=	https://github.com/t-tk/groff-CJK-font.git
 groff.dir?=	/vagrant/groff
-GROFF_TAG?=	refs/tags/1.23.0
+GROFF_TAG?=	refs/tags/${GROFF_VERSION}
 
 all::	groff.all
 
@@ -20,10 +19,11 @@ groff.all:	groff.patch
 groff.configure:	groff.git automake.pkg autoconf.pkg libtool.pkg		\
 		texinfo.pkg bison.pkg pkgconf.pkg libuchardet-dev.pkg	\
 		libxaw7-dev.pkg netpbm.pkg
+	[ $(groff.dir) ]
 	cd $(groff.dir); \
 	git reset --hard; \
 	[ ! -z "$(GROFF_TAG)" ] && git checkout $(GROFF_TAG); \
-	git pull; \
+	echo git pull origin master; \
 	[ -f ./bootstrap ] && ./bootstrap; \
 	./configure --prefix=${GROFF_PREFIX}
 	touch $@
@@ -46,8 +46,11 @@ clean::
 	rm -f groff.all
 
 install:: all
+	[ ! -L text.map ] || sudo rm -f text.map
 	sudo make -C $(groff.dir) $@
 	if [ ! -L "${SITE_TMAC}" -o "$$(readlink ${SITE_TMAC})" != "/etc/groff" ]; then \
 		sudo mv ${SITE_TMAC} ${SITE_TMAC}.old; \
 		sudo ln -s /etc/groff ${SITE_TMAC}; \
 	fi
+	cd ${GROFF_FONT}/devps/generate; \
+	[ -f text.map ] || sudo ln -s textmap text.map

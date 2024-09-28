@@ -1,6 +1,8 @@
 HOME?=		$(shell getent passwd ${USER} |cut -d: -f6)
 PERL_VERSION?=		5.34.0
 PYTHON_VERSION?=	3.10.12
+#GROFF_VERSION?=		1.22.4
+GROFF_VERSION?=		1.23.0
 
 LOCAL_BIN?=	/usr/local/bin
 
