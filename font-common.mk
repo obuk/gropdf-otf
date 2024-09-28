@@ -59,6 +59,7 @@ $1$2: $($1)-$($2).otf $($1)-$($2).afm otftodit.pl
 	else \
 		cat $$@.err; \
 	fi
+	@[ -f $$@ ]
 	@rm -f $$@.err
 
 install:: install-$1$2
