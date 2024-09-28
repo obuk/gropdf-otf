@@ -6,6 +6,7 @@ include Mk/*.mk
 
 all::	needrestart-auto
 	${MAKE} -f groff.mk clean install
+	${MAKE} -f site-tmac.mk clean install
 	${MAKE} -f gropdf.mk clean install
 	${MAKE} -f prepro.mk clean install
 	${MAKE} -f font-haranoaji.mk clean install
@@ -21,6 +22,7 @@ needrestart-auto:
 
 clean::
 	${MAKE} -f groff.mk clean
+	${MAKE} -f site-tmac.mk clean
 	${MAKE} -f gropdf.mk clean
 	${MAKE} -f prepro.mk clean
 	${MAKE} -f font-haranoaji.mk clean
@@ -49,8 +51,7 @@ sample:	$(addsuffix .pdf, $(SAMPLE))
 %.pdf:	manpages-ja.pkg
 	path=`man -w -Lja $(basename $@)`; \
 	case $$path in *.gz) zcat $$path;; *) cat $$path;; esac | \
-	${GROFF} ${GROPDF_DEBUG} -Kutf8 -ktp -mja -mandoc \
-		files/ps.local files/man.local - > $@
+	${GROFF} ${GROPDF_DEBUG} -Kutf8 -ktp -mja -mandoc - > $@
 
 clean::
 	rm -f *.pdf
