@@ -35,7 +35,7 @@ use File::Temp qw/tempfile/;
 use Data::Dumper qw/Dumper/;
 $Data::Dumper::Indent = 1;
 $Data::Dumper::Terse = 1;
-use lib qw(/vagrant/font-ttf/lib);
+#use lib qw(/vagrant/font-ttf/lib);
 use Font::TTF::Font;
 
 use constant
@@ -915,13 +915,12 @@ foreach my $fontno (sort keys %fontlst)
             }
         }
 
-        my $tag = join '', map chr(int((rand(26)))+65), 1..6;
-        $DOWNLOAD->{' FontName'} //= join '+', $tag, $fnt->{' FontName'};
+        $DOWNLOAD->{' FontName'} //= SubTag().$fnt->{' FontName'};
         my $p = GetObj($fnt->{font_descriptor});
         for ($DOWNLOAD->{fontfile}) {
             $p->{FontFile3} = $_ if defined;
         }
-        $p->{' FontName'} = "/".$DOWNLOAD->{' FontName'};
+        $p->{'FontName'} = "/".$DOWNLOAD->{' FontName'};
     }
 
 }
