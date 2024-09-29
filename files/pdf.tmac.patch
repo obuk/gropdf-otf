@@ -6,7 +6,7 @@
   .\" The actual job of creating an outline reference
   .\" is performed by the "pdfbookmark" macro.
   .\"
-+ .nr PDFBOOKMARK.ASCIIFY 0
++ .nr PDFBOOKMARK.NOASCIIFY 0
   .de pdfbookmark
   .\" ------------------------------------------------------------------
   .\" Usage:
@@ -16,7 +16,7 @@
   .      el .ds PDFBOOKMARK.NAME \\*[pdf:href-T]
   .      pdf:href.sety
   .         ds pdf:cleaned \\$*
-+ .      ie (!\\n[PDFBOOKMARK.ASCIIFY]) \{\
++ .      ie !\\n[PDFBOOKMARK.NOASCIIFY] \{\
   .         ev pdfcln
   .         tr \[em]-
   .         nf

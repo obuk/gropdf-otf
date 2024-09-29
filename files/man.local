@@ -16,7 +16,7 @@
 .
 .\" Use headings as bookmarks.
 .if t \{\
-.  nr PDFBOOKMARK.ASCIIFY 0
+.  nr PDFBOOKMARK.NOASCIIFY 1
 .  if !dan*bookmark \{\
 .rn SH an-SH
 .de SH
