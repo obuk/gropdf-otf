@@ -1312,12 +1312,21 @@ sub w_array {
         my $w;
         if ($otf) {
             if ($fnt->{vertical}) {
+		print STDERR "can't happen near line ", __LINE__, " in ", __FILE__, ".\n";
+
+=begin comment
+
                 $w = $otf->{vmtx}{advance}[$gid] // $fnt->{' DW'};
                 if ($fnt->{' GPOS'}) {
                     for ($fnt->{' GPOS'}{$gid}{YAdvance}) {
                         $w += $_ if defined;
                     }
                 }
+
+=end comment
+
+=cut
+
             } else {
                 $w = $otf->{hmtx}{advance}[$gid] // $fnt->{' DW'};
                 if ($fnt->{' GPOS'}) {
@@ -1433,10 +1442,19 @@ sub w2_array {
                     $w1_y -= $_ if defined;
                 }
             } else {
+		print STDERR "can't happen near line ", __LINE__, " in ", __FILE__, ".\n";
+
+=begin comment
+
                 $w1_x = $otf->{hmtx}{advance}[$gid] // 1000;
                 for ($v->{XAdvance}) {
                     $w1_x += $_ if defined;
                 }
+
+=end comment
+
+=cut
+
             }
         }
 
@@ -5000,7 +5018,7 @@ sub PutLine
                 $s.=') ' if !$n;
                 $s.=d3(($c->[CWID]-$c->[HWID])*100).' (';
                 if ($thisfnt->{vertical}) {
-                    push @TJ, d3(-($c->[CWID]-$c->[HWID])*100); # xxxxx
+                    push @TJ, d3(-($c->[CWID]-$c->[HWID])*100); # xxxxx (not covered)
                 } else {
                     push @TJ, d3(($c->[CWID]-$c->[HWID])*100);
                 }
@@ -5011,11 +5029,11 @@ sub PutLine
             {
                 $s.=' (',$n=0 if $n;
                 if (defined $placement) {
-                    #if ($thisfnt->{vertical}) {
-                        push @TJ, -$placement, $char, $placement; # xxxxx
-                    #} else {
-                    #    push @TJ, $placement, $char, -$placement;
-                    #}
+                    if ($thisfnt->{vertical}) {
+                        push @TJ, -$placement, $char, $placement;
+                    } else {
+                        push @TJ, $placement, $char, -$placement;
+                    }
                 } else {
                     push @TJ, $char;
                 }
@@ -5027,7 +5045,7 @@ sub PutLine
                 $s.=') ' if !$n;
                 $s.=d3((($c->[CWID]-$c->[HWID])*1000)/$cftsz).' (';
                 if ($thisfnt->{vertical}) {
-                    push @TJ, d3((-($c->[CWID]-$c->[HWID])*1000)/$cftsz); # xxxxx
+                    push @TJ, d3((-($c->[CWID]-$c->[HWID])*1000)/$cftsz);
                 } else {
                     push @TJ, d3((($c->[CWID]-$c->[HWID])*1000)/$cftsz);
                 }
@@ -5040,11 +5058,11 @@ sub PutLine
         {
             $s.="(",$n=0 if $n;
             if (defined $placement) {
-                #if ($thisfnt->{vertical}) {
-                    push @TJ, -$placement, $char, $placement; # xxxxx
-                #} else {
-                #    push @TJ, $placement, $char, -$placement;
-                #}
+                if ($thisfnt->{vertical}) {
+                    push @TJ, -$placement, $char, $placement;
+                } else {
+                    push @TJ, $placement, $char, -$placement;
+                }
             } else {
                 push @TJ, $char;
             }
@@ -5215,7 +5233,6 @@ sub PutGlyph
             $dy = $cftsz / 1000 * (500 + $thisfnt->{' Descender'})
                 if $thisfnt && $thisfnt->{vertical};
             $stream.="$matrix ".PutXY($xpos,$ypos - $dy)." Tm\n", $poschg=0;
-            #$stream.="$matrix ".PutXY($xpos,$ypos)." Tm\n", $poschg=0;
             $tmxpos=$xpos;
             $matrixchg=0;
             $stream.="$curkern Tc\n";
