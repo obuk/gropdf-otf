@@ -5278,7 +5278,17 @@ my $desc = $opt_d || "DESC";
 my $sys_map = $groff_sys_fontdir . "/devps/generate/" . $map;
 my $sys_desc = $groff_sys_fontdir . "/devps/" . $desc;
 
+=begin comment
+
 my %unicode_to_AGL;
+while (my ($name, $unicode) = each %AGL_to_unicode) {
+    push @{$unicode_to_AGL{$unicode}}, $name;
+}
+
+=end comment
+
+=cut
+
 my %gid_to_unicode;
 
 my ($verbose, $debug) = (0, 0);
@@ -5321,10 +5331,8 @@ if ($otffile) {
 	my $cid = $gid2cid->[$gid];
 	$cid2gid->[$cid] = $gid if defined $cid;
     }
-    # my $gid_space = $otf->{'CFF '}->Encoding->{code}[0x20];
 
     $otf->{cmap}->read;
-
     my $uv_gid = $otf->{'cmap'}->find_ms->{val};
     $gid_space = $uv_gid->{0x20};
     $cid_space = $gid2cid->[$gid_space];
@@ -5677,7 +5685,10 @@ sub gid_to_glyphname {
     for my $u (@{$gid_to_unicode{$gid}}) {
 	my @u = unpack "U*", $u;
 	my $hex = join '_' => map sprintf("%04X", $_), @u;
-	push @psname, grep defined && !$seen{$_}++, @{$unicode_to_AGL{$hex}};
+	#push @psname, grep defined && !$seen{$_}++, @{$unicode_to_AGL{$hex}};
+	while (my ($name, $unicode) = each %AGL_to_unicode) {
+	    push @psname, $name if $unicode eq $hex;
+	}
     }
     wantarray? @psname : $psname[0];
 }
@@ -5931,7 +5942,7 @@ if (!$opt_x) {
 
 if ($iscidfont) {
     my $option = $ot_feature{liga} // '*,*,liga';
-    my $liga = gpos($otf, grep defined, ot_feature($otf, 'GPOS', $option));
+    my $liga = gsub($otf, grep defined, ot_feature($otf, 'GSUB', $option));
     for my $k (keys %$liga) {
         my @list;
         for my $gid ($k, @{$liga->{$k}}) {
