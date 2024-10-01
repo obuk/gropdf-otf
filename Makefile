@@ -41,7 +41,7 @@ install::	all
 
 
 # sample
-GROFF?=		${GROFF_BIN}/groff -Tpdf -P-e -P-p${PAPERSIZE} -dpaper=${PAPERSIZE}
+GROFF?=		${GROFF_BIN}/groff -Tpdf -P-e -P--opt=5 -P-p${PAPERSIZE} -dpaper=${PAPERSIZE}
 GROPDF_DEBUG?=	-P-d -P--pdfver=1.4
 
 SAMPLE?=	groff gropdf groff.7 groff_font groff_char groff_out
