@@ -5359,6 +5359,8 @@ if ($otffile) {
 	}
     }
 
+    $gid_to_unicode{$gid_space} = [ sort @{$gid_to_unicode{$gid_space}} ];
+
     $otf->{'OS/2'}->read;
     $descender = $otf->{'OS/2'}->{sTypoDescender};
 
@@ -5496,6 +5498,10 @@ while (<AFM>) {
 			    $cid = $gid2cid->[$gid];
 			    $n = $cid;
 			}
+		    }
+
+		    if ($cid == $cid_space) {
+			push @umap, [ $cid_space, "space" ];
 		    }
 
 		    for my $u (@{$gid_to_unicode{$gid}}) {
@@ -6338,7 +6344,5 @@ sub ot_feature {
 # Local Variables:
 # fill-column: 72
 # mode: CPerl
-# tab-width: 8
-# indent-tabs-mode: t
 # End:
 # vim: set cindent noexpandtab shiftwidth=2 softtabstop=2 textwidth=72:
