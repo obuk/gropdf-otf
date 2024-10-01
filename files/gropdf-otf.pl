@@ -37,6 +37,8 @@ $Data::Dumper::Indent = 1;
 $Data::Dumper::Terse = 1;
 #use lib qw(/vagrant/font-ttf/lib);
 use Font::TTF::Font;
+my $reduce_TJ = 1;
+my $reduce_d3 = 1;
 
 use constant
 {
@@ -466,13 +468,6 @@ my $version=0;
 my $stats=0;
 my $unicodemap;
 my $options=7;
-
-# The width of a space is different for horizontal and vertical writing.
-# This is because the cid of a space is different for horizontal and
-# vertical writing.  Until I understand this exactly, I will disable the
-# USESPACE option.
-
-$options &= ~USESPACE;          # xxxxx
 my $PDFver=1.7;
 my @idirs;
 
@@ -1205,7 +1200,6 @@ ref $f->{FNT}{t1flags}:
     for my $i (0 .. $#{$fnt->{TRFCHAR}}) {
         for my $j (0 .. $#{$fnt->{TRFCHAR}->[$i]}) {
             my $cid = $fnt->{CHARSET}->[$i]->[$j];
-            #my $gid = $fnt->{' CID2GID'}->[$cid];
             my $nam = $fnt->{TRFCHAR}->[$i]->[$j];
             my $unicode = $fnt->{NAM}{$nam}[UNICODE];
             $fnt->{tounicode}{$cid} = decode "UTF16-BE",
@@ -3956,21 +3950,18 @@ sub LoadFont
     $fnt{NAM}->{''}=[0,-1,'/.notdef',-1,0,0,0];
     $slant=-$fnt{'slant'} if exists($fnt{'slant'});
     $fnt{slant}=$slant;
-    $fnt{nospace}=(!defined($fnt{NAM}->{u0020}->[PSNAME]) or $fnt{NAM}->{u0020}->[PSNAME] ne '/space' or !exists($fnt{'spacewidth'}))?1:0;
 
-    # otftodit stores the cid in $fnt{NAM}->{u0020}->[PSNAME] for the
-    # cidfont (otf), so I compare $fnt{NAM}->{u0020}->[PSNAME] with
-    # $fnt{NAM}->{space}->[PSNAME], not with 'space'. -- obuk
+    # $fnt{nospace}=(!defined($fnt{NAM}->{u0020}->[PSNAME]) or $fnt{NAM}->{u0020}->[PSNAME] ne '/space' or !exists($fnt{'spacewidth'}))?1:0;
 
-    if ($fnt{cidfont}) {
-      $fnt{nospace}=(
-          !defined($fnt{NAM}->{u0020}->[PSNAME]) or
-          !defined($fnt{NAM}->{space}->[PSNAME]) or
-          $fnt{NAM}->{u0020}->[PSNAME] ne $fnt{NAM}->{space}->[PSNAME] or
-          !exists($fnt{'spacewidth'}))?1:0;
-    } else {
-        $fnt{nospace}=(!defined($fnt{NAM}->{u0020}->[PSNAME]) or $fnt{NAM}->{u0020}->[PSNAME] ne '/space' or !exists($fnt{'spacewidth'}))?1:0;
-    }
+    # Set nospace to 1 in cidfont.  Because cidfont requires character
+    # CID numbers to be expressed in hexadecimal. (e.g. [ <XXXX> ] TJ)
+    # So the USESPACE option will not have the desired effect.
+
+    $fnt{nospace} ||= 0;
+    $fnt{nospace} ||= 1 if $fnt{cidfont};
+    $fnt{nospace} ||= 1 if !defined($fnt{NAM}->{u0020}->[PSNAME]);
+    $fnt{nospace} ||= 1 if $fnt{NAM}->{u0020}->[PSNAME] ne '/space';
+    $fnt{nospace} ||= 1 if !exists($fnt{'spacewidth'});
 
     $fnt{'spacewidth'}=270 if !exists($fnt{'spacewidth'});
     Warn("Using nospace mode for font '$ofontnm'") if $fnt{nospace} == 1 and $options & USESPACE;
@@ -4909,21 +4900,19 @@ sub PutLine
 
     return if (scalar(@lin) == 0 or ($#lin == 0 and !defined($lin[0]->[CHR])));
 
-    my $s='[ ';
-    my $n=1;
+    my @TJ;
     my $len=0;
     my $rev=0;
 
     if (($lin[0]->[CHR]||0) < 0)
     {
         $len=($lin[$#lin]->[XPOS]-$lin[0]->[XPOS]+$lin[$#lin]->[HWID])*100;
-        $s.=d3($len).' ';
+        push_TJ(\@TJ, $len);
     $rev=1;
     }
 
     $stream.="%! wht0sz=".d3($whtsz/$unitwidth).", wt=".((defined($wt))?d3($wt/$unitwidth):'--')."\n" if $debug;
 
-    my @TJ;
     foreach my $c (@lin)
     {
         my $chr=$c->[CHR];
@@ -4948,7 +4937,6 @@ sub PutLine
             } else {
                 if (my $otf = $thisfnt->{' OTF'}) {
                     my $gid = $thisfnt->{' CID2GID'}->[$psname];
-                    #$char = sprintf "<%04X>", $gid;
                     $char = sprintf "<%04X>", $psname;
                     if (my $v = $thisfnt->{' GPOS'}{$gid}) {
                         if ($thisfnt->{vertical}) {
@@ -4975,7 +4963,7 @@ sub PutLine
 
             my $gap = $c->[HWID]*$unitwidth;
 
-            if ($options & USESPACE and $thisfnt->{nospace}==0)
+            if ($options & USESPACE and $thisfnt->{nospace}==0 and !$thisfnt->{cidfont})
             {
                 $stream.="%!! GAP=".($gap)."\n" if $debug;
 
@@ -4987,9 +4975,7 @@ sub PutLine
 
                     if ($i < 6)
                     {
-                        $s.="(",$n=0 if $n;
-                        $s.=' ' x $i;
-                        push @TJ, "(" . ' ' x $i . ")";
+                        push_TJ(\@TJ, "(" . ' ' x $i . ")");
                         $gap-=($whtsz+$wt) * $i;
                     }
                 }
@@ -5001,90 +4987,95 @@ sub PutLine
 
             if (abs($gap) > 1)
             {
-                $s.=') ' if !$n;
-                $s.=d3(-$gap/$cftsz).' (';
-                if ($thisfnt->{vertical}) {
-                    push @TJ, d3($gap/$cftsz); # xxxxx
-                } else {
-                    push @TJ, d3(-$gap/$cftsz);
-                }
-                $n=0;
+                my $w = -$gap/$cftsz;
+                $w = -$w if $thisfnt->{vertical};
+                push_TJ(\@TJ, $w);
             }
         }
         elsif ($c->[CWID] != $c->[HWID])
         {
             if ($rev)
             {
-                $s.=') ' if !$n;
-                $s.=d3(($c->[CWID]-$c->[HWID])*100).' (';
-                if ($thisfnt->{vertical}) {
-                    push @TJ, d3(-($c->[CWID]-$c->[HWID])*100); # xxxxx (not covered)
-                } else {
-                    push @TJ, d3(($c->[CWID]-$c->[HWID])*100);
-                }
-                $n=0;
+                my $w = ($c->[CWID]-$c->[HWID])*100;
+                $w = -$w if $thisfnt->{vertical};
+                push_TJ(\@TJ, $w); # xxxxx (not covered)
             }
 
             if (defined($chr))
             {
-                $s.=' (',$n=0 if $n;
                 if (defined $placement) {
-                    if ($thisfnt->{vertical}) {
-                        push @TJ, -$placement, $char, $placement;
-                    } else {
-                        push @TJ, $placement, $char, -$placement;
-                    }
+                    push_TJ(\@TJ, -$placement, $char, $placement);
                 } else {
-                    push @TJ, $char;
+                    push_TJ(\@TJ, $char);
                 }
-                $s.=$char;
             }
 
             if (!$rev)
             {
-                $s.=') ' if !$n;
-                $s.=d3((($c->[CWID]-$c->[HWID])*1000)/$cftsz).' (';
-                if ($thisfnt->{vertical}) {
-                    push @TJ, d3((-($c->[CWID]-$c->[HWID])*1000)/$cftsz);
-                } else {
-                    push @TJ, d3((($c->[CWID]-$c->[HWID])*1000)/$cftsz);
-                }
-                $n=0;
+                my $w = (($c->[CWID]-$c->[HWID])*1000)/$cftsz;
+                $w = -$w if $thisfnt->{vertical};
+                push_TJ(\@TJ, $w);
             }
 
 
         }
         else
         {
-            $s.="(",$n=0 if $n;
             if (defined $placement) {
-                if ($thisfnt->{vertical}) {
-                    push @TJ, -$placement, $char, $placement;
-                } else {
-                    push @TJ, $placement, $char, -$placement;
-                }
+                push_TJ(\@TJ, -$placement, $char, $placement);
             } else {
-                push @TJ, $char;
+                push_TJ(\@TJ, $char);
             }
-            $s.=$char;
         }
     }
 
-    $s=substr($s,0,-1),$n=1 if substr($s,-1) eq "(" and substr($s,-2,1) ne "\\";
-    $s.=")" if !$n;
-    $s.=d3(-$len) if $len;
+    push_TJ(\@TJ, -$len) if $len;
     $wt=0 if !defined($wt);
     $stream.=d3($wt/$unitwidth)." Tw " if $options & USESPACE;
-    #$stream.="$s] TJ\n";
     $stream.="[ @TJ ] TJ\n";
     @lin=();
     $wt=undef;
     $whtsz=$fontlst{$cft}->{FNT}->{spacewidth}*$cftsz;
 }
 
+sub push_TJ {
+    my $TJ = shift;
+    return undef unless ref $TJ;
+    if (!$reduce_TJ) {
+        push @$TJ, map { /^[-+]?\d/? d3($_) : $_ } @_;
+        return $TJ;
+    }
+    for (@_) {
+        my $t = substr($_, 0, 1);
+        if ($t eq '(' || $t eq '<') {
+            if (@$TJ && substr($TJ->[-1], 0, 1) eq $t) {
+                substr($TJ->[-1], -1, 1) = substr($_, 1);
+            } else {
+                push @$TJ, $_;
+            }
+        } else {
+            if (@$TJ && $TJ->[-1] =~ /^[-+]?[.\d]/) {
+                my $num = d3(pop(@$TJ) + $_);
+                push @$TJ, $num if $num != 0;
+            } else {
+                push @$TJ, d3($_);
+            }
+        }
+    }
+    return $TJ;
+}
+
 sub d3
 {
-    return(sprintf("%.3f",shift || 0));
+    my $d3 = sprintf("%.3f",shift || 0);
+    return $d3 if !$reduce_d3;
+    my ($int, $prec) = split /\./, $d3;
+    $int += 0;
+    if ($prec != 0) {
+        $prec =~ s/0{1,2}$//;
+        return join '.', $int, $prec;
+    }
+    return $int;
 }
 
 sub  LoadAhead
@@ -6006,8 +5997,6 @@ sub gpos {
 
 # Local Variables:
 # fill-column: 72
-# tab-width: 8
-# indent-tabs-mode: t
 # mode: CPerl
 # End:
 # vim: set cindent noexpandtab shiftwidth=4 softtabstop=4 textwidth=72:
