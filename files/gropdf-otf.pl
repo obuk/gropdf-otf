@@ -1234,16 +1234,15 @@ ref $f->{FNT}{t1flags}:
     GetObj($font_resource)->{DescendantFonts} = [ $cid_font ];
 
     my $flags = 0;
-    my $special = 0;
     #$flags += 1 << ( 1 - 1); # FixedPitch
     $flags += 1 << ( 1 - 1) if $fnt->{' isFixedPitch'};
     #$flags += 1 << ( 2 - 1); # Serif
-    $flags += 1 << ( 2 - 1) if $fnt->{' FontName'} =~ /Serif/;
+    $flags += 1 << ( 2 - 1) if $fnt->{' FontName'} =~ /Serif/i;
     #$flags += 1 << ( 3 - 1); # Symbolic
-    $flags += 1 << ( 3 - 1) if $special;
+    $flags += 1 << ( 3 - 1) if $fnt->{special};
     #$flags += 1 << ( 4 - 1); # Script
     #$flags += 1 << ( 6 - 1); # Nonsymbolic
-    $flags += 1 << ( 6 - 1) if !$special;
+    $flags += 1 << ( 6 - 1) if !$fnt->{special};
     #$flags += 1 << ( 7 - 1); # Italic
     $flags += 1 << ( 7 - 1) if $fnt->{slant};
     #$flags += 1 << (17 - 1); # AllCap
@@ -3956,12 +3955,15 @@ sub LoadFont
     # Set nospace to 1 in cidfont.  Because cidfont requires character
     # CID numbers to be expressed in hexadecimal. (e.g. [ <XXXX> ] TJ)
     # So the USESPACE option will not have the desired effect.
+    $fnt{nospace} //= 0;
 
-    $fnt{nospace} ||= 0;
-    $fnt{nospace} ||= 1 if $fnt{cidfont};
-    $fnt{nospace} ||= 1 if !defined($fnt{NAM}->{u0020}->[PSNAME]);
-    $fnt{nospace} ||= 1 if $fnt{NAM}->{u0020}->[PSNAME] ne '/space';
-    $fnt{nospace} ||= 1 if !exists($fnt{'spacewidth'});
+    # To see the effect of the USESPACE option in cidfont, comment out.
+    $fnt{nospace} = 1 if $fnt{cidfont}; # xxxxx
+
+    $fnt{nospace} = 1 if
+        !defined($fnt{NAM}->{u0020}->[PSNAME]) or
+        !$fnt{cidfont} && $fnt{NAM}->{u0020}->[PSNAME] ne '/space' or
+        !exists($fnt{'spacewidth'});
 
     $fnt{'spacewidth'}=270 if !exists($fnt{'spacewidth'});
     Warn("Using nospace mode for font '$ofontnm'") if $fnt{nospace} == 1 and $options & USESPACE;
@@ -4053,34 +4055,6 @@ sub LoadFont
 
             $fnt{' DW'} = 1000;
             $fnt{' DW2'} = [ 1000 + $fnt{' Descender'}, -1000 ];
-
-            0 and do {
-                for (
-
-                    qw/ vertical Encoding CMapType CMapName FontName
-                        FamilyName Notice Weight isFixedPitch
-                        ItalicAngle slant FontBBox fntbbox Ascender ascent
-                        Descender CapHeight capheight /
-
-                ) {
-                    my $v;
-                    if (defined ($v = $fnt{" $_"})) {
-                        if (ref $v) {
-                            print STDERR join ' => ', "' $_'", "[ ".join(', ', @$v)." ]", "\n";
-                        } else {
-                            print STDERR join ' => ', "' $_'", "'$v'", "\n";
-                        }
-                    } elsif (defined ($v = $fnt{$_})) {
-                        if (ref $v) {
-                            print STDERR join ' => ', "'$_'", "[ ".join(', ', @$v)." ]", "\n";
-                        } else {
-                            print STDERR join ' => ', "'$_'", "'$v'", "\n";
-                        }
-                    } else {
-                        print STDERR join ' => ', "'$_'", "undef", "\n";
-                    }
-                }
-            };
         }
 #         my ($head,$body,$tail)=GetType1($download{$fontkey});
 #         $head=~s/\/Encoding .*?readonly def\b/\/Encoding StandardEncoding def/s;
@@ -4963,7 +4937,7 @@ sub PutLine
 
             my $gap = $c->[HWID]*$unitwidth;
 
-            if ($options & USESPACE and $thisfnt->{nospace}==0 and !$thisfnt->{cidfont})
+            if ($options & USESPACE and $thisfnt->{nospace}==0)
             {
                 $stream.="%!! GAP=".($gap)."\n" if $debug;
 
@@ -4975,7 +4949,14 @@ sub PutLine
 
                     if ($i < 6)
                     {
-                        push_TJ(\@TJ, "(" . ' ' x $i . ")");
+                        if ($thisfnt->{cidfont}) {
+                            my $space = 'u0020';
+                            my ($chf, $ch) = GetNAM($thisfnt, $space);
+                            AssignGlyph($thisfnt, $chf, $ch) unless $chf->[MINOR];
+                            push_TJ(\@TJ, "<" . sprintf("%04X", $chf->[PSNAME]) x $i . ">");
+                        } else {
+                            push_TJ(\@TJ, "(" . ' ' x $i . ")");
+                        }
                         $gap-=($whtsz+$wt) * $i;
                     }
                 }
