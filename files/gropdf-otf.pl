@@ -1206,6 +1206,11 @@ ref $f->{FNT}{t1flags}:
                 pack "n*", map hex($_), split '_', $unicode;
         }
     }
+    if ($fnt->{usespace}) {
+        my ($chf, $ch) = GetNAM($fnt, 'u0020');
+        $fnt->{tounicode}{$chf->[PSNAME]} = decode "UTF16-BE",
+            pack "n*", map hex($_), split '_', $chf->[UNICODE];
+    }
 
     # Type 0 Font Dictionaries (Table 121)
     my $font_resource = BuildObj(++$objct, {
@@ -1666,24 +1671,27 @@ sub MakeMatrix
     my @mat=($frot)?(0,1,-1,0):(1,0,0,1);
 
     my ($a, $b, $c, $d);
-    if (!$frot) {
-        if (!($thisfnt && $thisfnt->{vertical})) {
-            ($a, $b, $c, $d) = (1, 0, 0, 1);
-            $c = $thisfnt->{' skew'} if $thisfnt && $thisfnt->{' skew'};
+
+    if ($thisfnt) {
+        if (!$frot) {
+            if (!($thisfnt->{vertical})) {
+                ($a, $b, $c, $d) = (1, 0, 0, 1);
+                $c = $thisfnt->{' skew'} // 0;
+            } else {
+                ($a, $b, $c, $d) = (0, 1, -1, 0);
+                $a = $thisfnt->{' skew'} // 0;
+            }
         } else {
-            ($a, $b, $c, $d) = (0, 1, -1, 0);
-            $a = $thisfnt->{' skew'} if $thisfnt && $thisfnt->{' skew'};
+            if (!($thisfnt->{vertical})) {
+                ($a, $b, $c, $d) = (0, 1, -1, 0);
+                $d = $thisfnt->{' skew'} // 0;
+            } else {
+                ($a, $b, $c, $d) = (-1, 0, 0, -1);
+                $b = $thisfnt->{' skew'} // 0;
+            }
         }
-    } else {
-        if (!($thisfnt && $thisfnt->{vertical})) {
-            ($a, $b, $c, $d) = (0, 1, -1, 0);
-            $d = $thisfnt->{' skew'} if $thisfnt && $thisfnt->{' skew'};
-        } else {
-            ($a, $b, $c, $d) = (-1, 0, 0, -1);
-            $b = $thisfnt->{' skew'} if $thisfnt && $thisfnt->{' skew'};
-        }
+        @mat = ($a, $b, $c, $d);
     }
-    @mat = ($a, $b, $c, $d);
 
     if (!$frot)
     {
@@ -4363,22 +4371,15 @@ sub do_f
 {
     my $par=shift;
     my $fnt=$fontlst{$par}->{FNT};
-    my $mm = 0;
-    if ($thisfnt) {
-        if ($thisfnt->{name} ne $fnt->{name}) {
-            PutLine();              # xxxxx - flush @line
-        }
-        if (($thisfnt->{vertical} // 0) != ($fnt->{vertical} // 0) ||
-            ($thisfnt->{' skew'}  // 0) != ($fnt->{' skew'}  // 0)) {
-            $mm = 1;
-        }
-    }
+    PutLine() if $thisfnt;
     $thisfnt=$fnt;
 
     #   IsText();
     $cft="$par";
     $fontchg=1;
-    MakeMatrix() if $mm;
+    my $matrix_save = $matrix;
+    MakeMatrix();
+    $matrixchg = 0 if $matrix eq $matrix_save;
     PutLine();
 }
 
@@ -4885,6 +4886,12 @@ sub PutLine
     $rev=1;
     }
 
+    if ($thisfnt->{cidfont}) {
+        # In cidfont, word spacing (Tw) does not seem to work because spaces
+        # are represented as <0001>, so we will suppress word spacing here.
+        $wt = 0;
+    }
+
     $stream.="%! wht0sz=".d3($whtsz/$unitwidth).", wt=".((defined($wt))?d3($wt/$unitwidth):'--')."\n" if $debug;
 
     foreach my $c (@lin)
@@ -4950,10 +4957,11 @@ sub PutLine
                     if ($i < 6)
                     {
                         if ($thisfnt->{cidfont}) {
-                            my $space = 'u0020';
-                            my ($chf, $ch) = GetNAM($thisfnt, $space);
-                            AssignGlyph($thisfnt, $chf, $ch) unless $chf->[MINOR];
-                            push_TJ(\@TJ, "<" . sprintf("%04X", $chf->[PSNAME]) x $i . ">");
+                            if ($i > 0) {
+                                $thisfnt->{usespace}++;
+                                my ($chf, $ch) = GetNAM($thisfnt, 'u0020');
+                                push_TJ(\@TJ, "<" . sprintf("%04X", $chf->[PSNAME]) x $i . ">");
+                            }
                         } else {
                             push_TJ(\@TJ, "(" . ' ' x $i . ")");
                         }
