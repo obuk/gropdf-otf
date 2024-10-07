@@ -5195,9 +5195,14 @@ use Encode;
 use Getopt::Long qw(:config gnu_getopt);
 GetOptions( "a=s", "c", "d=s", "e=s", "f=s", "i=s", "k", "m", "n",
   "o=s", "s", "v", "w=i" => \$space_width, "x", "version" => \$opt_v,
-  "F=s", \ my %ot_feature, "V", \ my $opt_vertical,
+  "F=s" => \ my %ot_feature, "V" => \ my $opt_vertical, #"S" => \ my $subst_all,
   "help" => \$want_help
 );
+#use feature 'say';
+use Data::Dumper qw/Dumper/;
+$Data::Dumper::Indent = 1;
+$Data::Dumper::Terse = 1;
+#use lib qw(/vagrant/font-ttf/lib);
 
 my $afmtodit_version = "GNU afmtodit (groff) version 1.23.0";
 
@@ -5339,7 +5344,7 @@ if ($otffile) {
     while (my ($uv, $gid) = each %{$uv_gid}) {
 	if ($gsub) {
 	    if (my $subst = $gsub->{$gid}) {
-		$gid = $subst unless $gid == $gid_space; # xxxxx
+		$gid = $subst; # if ($gid != $gid_space || $subst_all);
 	    }
 	}
 	push @{$gid_to_unicode{$gid}}, pack "U", $uv;
@@ -5352,14 +5357,21 @@ if ($otffile) {
 	    $gid //= $uv_gid->{$uv};
 	    if ($gsub) {
 		if (my $subst = $gsub->{$gid}) {
-		    $gid = $subst unless $gid == $gid_space; # xxxxx
+		    $gid = $subst; # if ($gid != $gid_space || $subst_all);
 		}
 	    }
 	    push @{$gid_to_unicode{$gid}}, pack "U*", $uv, $uvs;
 	}
     }
 
-    $gid_to_unicode{$gid_space} = [ sort @{$gid_to_unicode{$gid_space}} ];
+    if (my $subst = $gsub->{$gid_space}) {
+	$gid_space = $subst; # if $subst_all;
+	$cid_space = $gid2cid->[$gid_space];
+    }
+
+    if (ref $gid_to_unicode{$gid_space}) {
+	$gid_to_unicode{$gid_space} = [ sort @{$gid_to_unicode{$gid_space}} ];
+    }
 
     $otf->{'OS/2'}->read;
     $descender = $otf->{'OS/2'}->{sTypoDescender};
@@ -5494,7 +5506,7 @@ while (<AFM>) {
 
 		    if ($gsub) {
 			if (my $subst = $gsub->{$gid}) {
-			    $gid = $subst unless $gid == $gid_space; # xxxxx
+			    $gid = $subst; # if ($gid != $gid_space || $subst_all);
 			    $cid = $gid2cid->[$gid];
 			    $n = $cid;
 			}
@@ -5515,19 +5527,21 @@ while (<AFM>) {
 			}
 		    }
 
-		    my $width = $otf->{'hmtx'}{'advance'}[$gid];
+		    my $width = $otf->{'hmtx'}{'advance'}[$gid] // 1000;
 		    if ($gpos) {
 			for ($gpos->{$gid}{XAdvance}) {
 			    $width += $_ if defined;
 			}
 		    }
-		    my $height = $otf->{'vmtx'}{'advance'}[$gid];
+		    my $height = $otf->{'vmtx'}{'advance'}[$gid] // 1000;
 		    if ($gpos) {
 			for ($gpos->{$gid}{YAdvance}) {
 			    $height += $_ if defined;
 			}
 		    }
-		    if ($opt_vertical && !($gid == 1)) {
+		    if ($opt_vertical
+			# && ($gid != $gid_space || $subst_all)
+		    ) {
 			my ($px, $py) = rotate(90, $llx, $lly);
 			my ($qx, $qy) = rotate(90, $urx, $ury);
 			($llx, $lly) = (min($px, $qx), min($py, $qy));
@@ -5671,7 +5685,7 @@ sub glyphname_to_cid {
     }
     if ($gsub) {
 	if (my $subst = $gsub->{$gid}) {
-	    $gid = $subst unless $gid == $gid_space; # xxxxx
+	    $gid = $subst; # if ($gid != $gid_space || $subst_all);
 	}
     }
     my $cid = $gid2cid->[$gid];
