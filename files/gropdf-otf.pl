@@ -888,7 +888,7 @@ foreach my $fontno (sort keys %fontlst)
     my $fnt = $f->{FNT};
     if ($fnt->{cidfont}) {
         my $DOWNLOAD = $DOWNLOAD{$fnt->{' FontName'}};
-        $fnt->{tounicode} = $DOWNLOAD->{tounicode};
+        $fnt->{' cid2uni'} = $DOWNLOAD->{' cid2uni'};
         $DOWNLOAD->{ucmap} //= unicode_cmap($fnt);
         GetObj($fnt->{font_resource})->{ToUnicode} = $DOWNLOAD->{ucmap}
             if $DOWNLOAD->{ucmap};
@@ -927,7 +927,7 @@ sub fontfile {
     #my $otf = $fnt->{' OTF'};
     #return $fnt->{' OTF'}->{'CFF '}->as_string;
 
-    my @cids = keys %{$fnt->{tounicode}};
+    my @cids = keys %{$fnt->{' cid2uni'}};
     return undef if !@cids || @cids == 1 && $cids[0] == 0;;
     my @gids = map { $fnt->{' CID2GID'}->[$_] } @cids; # xxxxx
 
@@ -1197,18 +1197,12 @@ ref $f->{FNT}{t1flags}:
 
     0 and print STDERR "ref \$f->{FNT}{WIDTH}: ", Dumper($f->{FNT}{WIDTH});
 
-    for my $i (0 .. $#{$fnt->{TRFCHAR}}) {
-        for my $j (0 .. $#{$fnt->{TRFCHAR}->[$i]}) {
-            my $cid = $fnt->{CHARSET}->[$i]->[$j];
-            my $nam = $fnt->{TRFCHAR}->[$i]->[$j];
-            my $unicode = $fnt->{NAM}{$nam}[UNICODE];
-            $fnt->{tounicode}{$cid} = decode "UTF16-BE",
-                pack "n*", map hex($_), split '_', $unicode;
-        }
-    }
     if ($fnt->{usespace}) {
-        my ($chf, $ch) = GetNAM($fnt, 'u0020');
-        $fnt->{tounicode}{$chf->[PSNAME]} = decode "UTF16-BE",
+        my $space = 'u0020';
+        my ($chf, $ch) = GetNAM($fnt, $space);
+        my $cid = $chf->[PSNAME];
+        $fnt->{' cid2nam'}{$cid} = $space;
+        $fnt->{' cid2uni'}{$cid} = decode "UTF16-BE",
             pack "n*", map hex($_), split '_', $chf->[UNICODE];
     }
 
@@ -1282,9 +1276,9 @@ ref $f->{FNT}{t1flags}:
     $fnt->{font_resource} = $font_resource;
 
     my $DOWNLOAD = $DOWNLOAD{$fnt->{' FontName'}} //= {};
-    $DOWNLOAD->{tounicode} = {
-        %{$DOWNLOAD->{tounicode} // {}},
-        %{$fnt->{tounicode} // {}},
+    $DOWNLOAD->{' cid2uni'} = {
+        %{$DOWNLOAD->{' cid2uni'} // {}},
+        %{$fnt->{' cid2uni'} // {}},
     };
 
     0 and print STDERR Dumper({
@@ -1299,43 +1293,13 @@ ref $f->{FNT}{t1flags}:
 
 sub w_array {
     my ($fnt) = @_;
-    my $otf = $fnt->{' OTF'};
-    my @cids = keys %{$fnt->{tounicode}};
 
     my @w;
     my $n = 0;
     my $lastc = -1;
-    for my $c (sort { $a <=> $b } @cids) {
-        my $gid = $fnt->{' CID2GID'}->[$c]; # xxxxx
-        my $w;
-        if ($otf) {
-            if ($fnt->{vertical}) {
-		print STDERR "can't happen near line ", __LINE__, " in ", __FILE__, ".\n";
-
-=begin comment
-
-                $w = $otf->{vmtx}{advance}[$gid] // $fnt->{' DW'};
-                if ($fnt->{' GPOS'}) {
-                    for ($fnt->{' GPOS'}{$gid}{YAdvance}) {
-                        $w += $_ if defined;
-                    }
-                }
-
-=end comment
-
-=cut
-
-            } else {
-                $w = $otf->{hmtx}{advance}[$gid] // $fnt->{' DW'};
-                if ($fnt->{' GPOS'}) {
-                    for ($fnt->{' GPOS'}{$gid}{XAdvance}) {
-                        $w += $_ if defined;
-                    }
-                }
-            }
-        } else {
-            $w = $fnt->{' DW'};
-        }
+    for my $c (sort { $a <=> $b } keys %{$fnt->{' cid2nam'}}) {
+        my ($chf, $ch) = GetNAM($fnt, $fnt->{' cid2nam'}{$c});
+        my $w = $chf->[WIDTH] // $fnt->{' DW'};
         if ($w == $fnt->{' DW'}) {
             $n++;
             next;
@@ -1396,13 +1360,12 @@ sub w_array {
 
 sub w2_array {
     my ($fnt) = @_;
-    my $otf = $fnt->{' OTF'};
-    my @cids = keys %{$fnt->{tounicode}};
 
     my @w2;
-    #my $n = 0;
     my $lastc = -1;
-    for my $c (sort { $a <=> $b } @cids) {
+    for my $c (sort { $a <=> $b } keys %{$fnt->{' cid2nam'}}) {
+        my ($chf, $ch) = GetNAM($fnt, $fnt->{' cid2nam'}{$c});
+        my $w = $chf->[WIDTH] // $fnt->{' DW'};
 
 	# PDF 32000-1:2008 PP.271-272
 	# The default position vector and vertical displacement vector shall be
@@ -1425,35 +1388,17 @@ sub w2_array {
         # dw2 = (v.y, w1.y) = (880, -1000)
 
         my ($w1_x, $w1_y, $v_x, $v_y) = (
-            0,                 # w1_x
+            0,                    # w1_x
             $fnt->{' DW2'}[1],    # w1_y
             $fnt->{' DW'} / 2,    # v_x
             $fnt->{' DW2'}[0]     # v_y
         );
 
-        if ($otf) {
-            my $gid = $fnt->{' CID2GID'}->[$c]; # xxxxx
-            my $v = $fnt->{' GPOS'}->{$gid};
-            if ($fnt->{vertical}) {
-                $w1_y = -($otf->{vmtx}{advance}[$gid] // 1000);
-                for ($v->{YAdvance}) {
-                    $w1_y -= $_ if defined;
-                }
-            } else {
-		print STDERR "can't happen near line ", __LINE__, " in ", __FILE__, ".\n";
-
-=begin comment
-
-                $w1_x = $otf->{hmtx}{advance}[$gid] // 1000;
-                for ($v->{XAdvance}) {
-                    $w1_x += $_ if defined;
-                }
-
-=end comment
-
-=cut
-
-            }
+        if ($fnt->{vertical}) {
+            $w1_y = -$w;
+        } else {
+            print STDERR "can't happen near line ", __LINE__, " in ", __FILE__, ".\n";
+            $w1_x = $w;
         }
 
         if (!ref $w2[-1] && @w2 >= 4 && $w2[-3] == $w1_y && $w2[-2] == $v_x && $w2[-1] == $v_y) {
@@ -1470,7 +1415,6 @@ sub w2_array {
 
         push @w2, $c, [ $w1_y, $v_x, $v_y ];
         $lastc = $c;
-        #$n = 0;
     }
 
     \@w2;
@@ -1479,7 +1423,7 @@ sub w2_array {
 
 sub unicode_cmap {
     my ($fnt) = @_;
-    return undef unless %{$fnt->{tounicode}};
+    return undef unless %{$fnt->{' cid2uni'}};
 
     my $CMapName = $fnt->{' CMapName'},
     my $CIDSystemInfo = {
@@ -1502,8 +1446,8 @@ begincmap
 /CMapName /$CMapName def
 /CMapType $fnt->{' CMapType'} def
 /CIDSystemInfo $CIDSystemInfo_text def
-@{[ codespacerange([ map pack("U*", $_), keys %{$fnt->{tounicode}} ]) ]}
-@{[ bfrange($fnt->{tounicode}) ]}
+@{[ codespacerange([ map pack("U*", $_), keys %{$fnt->{' cid2uni'}} ]) ]}
+@{[ bfrange($fnt->{' cid2uni'}) ]}
 endcmap
 CMapName currentdict /CMap defineresource pop
 end
@@ -1519,8 +1463,8 @@ begincmap
 /CMapName /$CMapName def
 /CMapType $fnt->{' CMapType'} def
 /CIDSystemInfo $CIDSystemInfo_text def
-@{[ codespacerange([ values %{$fnt->{tounicode}} ]) ]}
-@{[ cidrange($fnt->{tounicode}) ]}
+@{[ codespacerange([ values %{$fnt->{' cid2uni'}} ]) ]}
+@{[ cidrange($fnt->{' cid2uni'}) ]}
 endcmap
 CMapName currentdict /CMap defineresource pop
 end
@@ -3873,6 +3817,7 @@ sub LoadFont
     my $fixwid=-1;
     my $ascent=0;
     my $charset='';
+    my %ngpos;
 
     while (<$f>)
     {
@@ -3919,16 +3864,42 @@ sub LoadFont
             $r[0]='u0020' if $r[3] == 32;
             $r[0]="u00".hex($r[3]) if $r[0] eq '---';
             $r[4]=$r[0] if !defined($r[4]);
-            #$fnt{NAM}->{$r[0]}=[$p[0],$r[3],'/'.$r[4],undef,undef,$r[5],$p[1]||0,$p[2]||0];
 
-	    # To visually distinguish between psname and cid, I decided
-	    # not to put a leading '/' on cid. -- obuk
+            if ($fnt{cidfont}) {
+                my %gpos;
+                if ($r[5] && $r[5] eq '--') {
+                    for (splice(@r, 6)) {
+                        my ($k, $v) = split '=';
+                        $gpos{$k} = $v;
+                    }
+                }
+                if ($gpos{unicode}) {
+                    $r[5] = $gpos{unicode};
+                    delete $gpos{unicode};
+                } else {
+                    if ($r[0] =~ /^u([\dA-F_]+)$/) {
+                        $r[5] = join '_', map { sprintf "%04X", $_ }
+                            unpack "n*", encode "UTF16-BE", pack "U*",
+                            map hex($_), split '_', $1;
+                    }
+                }
+                my $cid = $r[4];
+                my $gid = $gpos{gid} // $cid;
+                $ngpos{$gid} = \%gpos;
+                delete $gpos{gid};
 
-            my $psname = ($fnt{cidfont} ? '' : '/').$r[4];
-            $fnt{NAM}->{$r[0]}=[$p[0],$r[3],$psname,undef,undef,$r[5],$p[1]||0,$p[2]||0];
+                # The PSNAME also stores the cid, which does not have a
+                # leading '/' for visual distinction. -- obuk
+                $fnt{NAM}->{$r[0]}=[$p[0],$r[3],$cid,     undef,undef,$r[5],$p[1]||0,$p[2]||0];
+            } else {
+                $fnt{NAM}->{$r[0]}=[$p[0],$r[3],'/'.$r[4],undef,undef,$r[5],$p[1]||0,$p[2]||0];
+            }
+
             $fnt{NO}->[$r[3]]=$r[0];
             $lastnm=$r[0];
             $lastchr=$r[3] if $r[3] > $lastchr;
+
+            # following lines are given in the $otf->{'OS/2'} table.
             $fixwid=$p[0] if $fixwid == -1;
             $fixwid=-2 if $fixwid > 0 and $p[0] != $fixwid;
 
@@ -3993,18 +3964,18 @@ sub LoadFont
             my $otf = Font::TTF::Font->open($fnt{fontfile});
             $fnt{' OTF'} = $otf;
 
+            $fnt{' GPOS'} = \%ngpos if %ngpos;
+            $fnt{' GSUB'} = 'not used';
             if ($fnt{opentype}) {
                 for (split /\s+/, $fnt{opentype}) {
                     my ($f, $x) = split /=/;
+                    next if defined $fnt{" \U$f\E"};
                     die $@ unless __PACKAGE__->can($f);
                     no strict 'refs';
                     $otf->{uc $f}->read;
                     $fnt{" \U$f\E"} = &$f($otf, split /,/, $x);
                 }
             }
-
-            $otf->{'hmtx'}->read;
-            $otf->{'vmtx'}->read;
 
             $otf->{'CFF '}->read;
             my $gid2cid = $otf->{'CFF '}->Charset->{code};
@@ -4014,7 +3985,7 @@ sub LoadFont
                 $cid2gid->[$cid] = $gid if defined $cid;
             }
             $fnt{' CID2GID'} = $cid2gid;
-            $fnt{' GID2CID'} = $gid2cid;
+            #$fnt{' GID2CID'} = $gid2cid;
 
             $fnt{' CIDSystemInfo'} = {
                 Registry => "(Adobe)",
@@ -4916,10 +4887,9 @@ sub PutLine
                 $char = "($char)";
                 $chrc.="(".chr(abs($chr)).")" if $cftmajor==0 and $chr < 128;
             } else {
-                if (my $otf = $thisfnt->{' OTF'}) {
-                    my $gid = $thisfnt->{' CID2GID'}->[$psname];
-                    $char = sprintf "<%04X>", $psname;
-                    if (my $v = $thisfnt->{' GPOS'}{$gid}) {
+                my $gid = $thisfnt->{' CID2GID'}->[$psname];
+                if (my $gpos = $thisfnt->{' GPOS'}) {
+                    if (my $v = $gpos->{$gid}) {
                         if ($thisfnt->{vertical}) {
                             for ($v->{'YPlacement'}) {
                                 $placement = $_ if defined;
@@ -4930,8 +4900,9 @@ sub PutLine
                             }
                         }
                     }
-                    $chrc.=$char;
                 }
+                $char = sprintf "<%04X>", $psname;
+                $chrc.=$char;
             }
             $chrc .= "[$psname]";
         }
@@ -5143,6 +5114,13 @@ sub AssignGlyph
     push(@{$fnt->{CHARSET}->[$chf->[MAJOR]]},$chf->[PSNAME]);
     push(@{$fnt->{TRFCHAR}->[$chf->[MAJOR]]},$ch);
     $stream.="% Assign: $chf->[PSNAME] to $chf->[MAJOR]/$chf->[MINOR]\n" if $debug;
+
+    my $cid = $chf->[PSNAME];
+    $fnt->{' cid2nam'}{$cid} = $ch;
+    if (my $unicode = $fnt->{NAM}{$ch}[UNICODE]) {
+        $fnt->{' cid2uni'}{$cid} = decode "UTF16-BE",
+            pack "n*", map hex($_), split '_', $unicode;
+    }
 }
 
 sub PutGlyph

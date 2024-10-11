@@ -5195,7 +5195,7 @@ use Encode;
 use Getopt::Long qw(:config gnu_getopt);
 GetOptions( "a=s", "c", "d=s", "e=s", "f=s", "i=s", "k", "m", "n",
   "o=s", "s", "v", "w=i" => \$space_width, "x", "version" => \$opt_v,
-  "F=s" => \ my %ot_feature, "V" => \ my $opt_vertical, #"S" => \ my $subst_all,
+  "F=s" => \ my %ot_feature, "V" => \ my $opt_vertical, "S" => \ my $skip_unnamed,
   "help" => \$want_help
 );
 #use feature 'say';
@@ -5344,7 +5344,7 @@ if ($otffile) {
     while (my ($uv, $gid) = each %{$uv_gid}) {
 	if ($gsub) {
 	    if (my $subst = $gsub->{$gid}) {
-		$gid = $subst; # if ($gid != $gid_space || $subst_all);
+		$gid = $subst;
 	    }
 	}
 	push @{$gid_to_unicode{$gid}}, pack "U", $uv;
@@ -5357,7 +5357,7 @@ if ($otffile) {
 	    $gid //= $uv_gid->{$uv};
 	    if ($gsub) {
 		if (my $subst = $gsub->{$gid}) {
-		    $gid = $subst; # if ($gid != $gid_space || $subst_all);
+		    $gid = $subst;
 		}
 	    }
 	    push @{$gid_to_unicode{$gid}}, pack "U*", $uv, $uvs;
@@ -5365,7 +5365,7 @@ if ($otffile) {
     }
 
     if (my $subst = $gsub->{$gid_space}) {
-	$gid_space = $subst; # if $subst_all;
+	$gid_space = $subst;
 	$cid_space = $gid2cid->[$gid_space];
     }
 
@@ -5506,7 +5506,7 @@ while (<AFM>) {
 
 		    if ($gsub) {
 			if (my $subst = $gsub->{$gid}) {
-			    $gid = $subst; # if ($gid != $gid_space || $subst_all);
+			    $gid = $subst;
 			    $cid = $gid2cid->[$gid];
 			    $n = $cid;
 			}
@@ -5539,9 +5539,7 @@ while (<AFM>) {
 			    $height += $_ if defined;
 			}
 		    }
-		    if ($opt_vertical
-			# && ($gid != $gid_space || $subst_all)
-		    ) {
+		    if ($opt_vertical) {
 			my ($px, $py) = rotate(90, $llx, $lly);
 			my ($qx, $qy) = rotate(90, $urx, $ury);
 			($llx, $lly) = (min($px, $qx), min($py, $qy));
@@ -5685,7 +5683,7 @@ sub glyphname_to_cid {
     }
     if ($gsub) {
 	if (my $subst = $gsub->{$gid}) {
-	    $gid = $subst; # if ($gid != $gid_space || $subst_all);
+	    $gid = $subst;
 	}
     }
     my $cid = $gid2cid->[$gid];
@@ -6142,7 +6140,11 @@ for (my $i = 0; $i <= $#encoding; $i++) {
 	# $ch ne "space"
 	($iscidfont || $ch ne "space")
     ) {
-	$map{$ch, "0"} = "---" if !defined $nmap{$ch} || $nmap{$ch} == 0;
+	#$map{$ch, "0"} = "---" if !defined $nmap{$ch} || $nmap{$ch} == 0;
+	if (!defined $nmap{$ch} || $nmap{$ch} == 0) {
+	    $map{$ch, "0"} = "---";
+	    next if $skip_unnamed;
+	}
 	my $type = 0;
 	my $h = $height{$ch};
 	$h = 0 if $h < 0;
@@ -6203,10 +6205,26 @@ for (my $i = 0; $i <= $#encoding; $i++) {
             my $name = $map{$ch, "0"};
             my $cid = $ch;
             my $gid = $cid2gid->[$cid]; # xxxxx
+	    my @copts;
             if (my ($unicode) = @{$gid_to_unicode{$gid}}) {
-                print "\t", join '_', map { sprintf "%04X", $_ }
-                    unpack "n*", encode "UTF16-BE", $unicode;
+		push @copts, "unicode=".join '_', map { sprintf "%04X", $_ }
+		    unpack "n*", encode "UTF16-BE", $unicode;
+		if ($name =~ /^u([\dA-F_]+)$/) {
+		    my $u = pack "U*", map hex($_), split '_', $1;
+		    #pop @copts if $u eq $unicode;
+		}
             }
+	    push @copts, "gid=$gid" if $gid != $cid;
+	    if ($gpos) {
+		while (my ($key, $value) = each %{$gpos->{$gid}}) {
+		    #push @copts, "$key=$value" if defined $value;
+		    #push @copts, "$key=$value" if $key !~ /^[XY]Advance$/ && defined $value;
+		    push @copts, "$key=$value" if $key =~ /^[XY]Placement$/ && defined $value;
+		}
+	    }
+	    if (@copts) {
+		print "\t-- @copts";
+	    }
         }
 	printf("\n");
 	if (defined $nmap{$ch}) {
