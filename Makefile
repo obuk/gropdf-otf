@@ -10,9 +10,9 @@ all::	needrestart-auto
 	${MAKE} -f gropdf.mk clean install
 	${MAKE} -f prepro.mk clean install
 	${MAKE} -f font-haranoaji.mk clean install
-	#${MAKE} -f font-han-serif.mk clean install
-	#${MAKE} -f font-han-sans.mk clean install
-	${MAKE} -f font-han-code.mk clean install
+	#${MAKE} -f font-han.mk clean install
+	#${MAKE} -f font-han-code-jp.mk clean install
+	#${MAKE} -f font-noto-cjk.mk clean install
 	${MAKE} GROPDF_DEBUG= sample
 
 needrestart-auto:
@@ -26,9 +26,9 @@ clean::
 	${MAKE} -f gropdf.mk clean
 	${MAKE} -f prepro.mk clean
 	${MAKE} -f font-haranoaji.mk clean
-	${MAKE} -f font-han-serif.mk clean
-	${MAKE} -f font-han-sans.mk clean
-	${MAKE} -f font-han-code.mk clean
+	${MAKE} -f font-han.mk clean
+	${MAKE} -f font-han-code-jp.mk clean
+	${MAKE} -f font-noto-cjk.mk clean
 	rm -f *.git
 	rm -f *.pkg
 	rm -f *.cpanm
@@ -41,7 +41,7 @@ install::	all
 
 
 # sample
-GROFF?=		${GROFF_BIN}/groff -Tpdf -P-e -P--opt=5 -P-p${PAPERSIZE} -dpaper=${PAPERSIZE}
+GROFF?=		${GROFF_BIN}/groff -Tpdf -P-e -P-p${PAPERSIZE} -dpaper=${PAPERSIZE}
 GROPDF_DEBUG?=	-P-d -P--pdfver=1.4
 
 SAMPLE?=	groff gropdf groff.7 groff_font groff_char groff_out

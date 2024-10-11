@@ -11,31 +11,29 @@ R?=	Regular
 B?=	Bold
 I?=	$R
 V?=	$R
-VI?=	$R
+IV?=	$R
 BI?=	$B
 BV?=	$B
-BVI?=	$B
+BIV?=	$B
 
 FAM?=	M G
-STY?=	R I B BI V VI BV BVI
+STY?=	R I B BI V IV BV BIV
 
 TEXTMAP?=	text.map
 TEXTENC?=	text.enc
 #OTFTODIT?=	perl ./otftodit.pl -c -e $(TEXTENC)
 OTFTODIT?=	perl ./files/otftodit.pl -c -e $(TEXTENC)
+EMBED?=
 
-ROPTS?=	-F palt="*,*,palt"
-#ROPTS+=	-F kern=
-iOPTS?=	-i 50 -m -a 12
-IOPTS?=	$(ROPTS) $(iOPTS)
-BOPTS?=	$(ROPTS)
+ROPTS?=		-F palt="*,*,palt"
+iOPTS?=		-i 50 -m -a 12
+IOPTS?=		$(ROPTS) $(iOPTS)
+BOPTS?=		$(ROPTS)
 BIOPTS?=	$(IOPTS)
-VOPTS?=	-V -F palt="*,*,vpal" -F vert="*,*,vrt2"
-#VOPTS+=	-F kern=
-#VOPTS+=	-F kern="*,*,kern|vkrn"
-VIOPTS?=	$(VOPTS) $(iOPTS)
+VOPTS?=		-V -F palt="*,*,vpal" -F vert="*,*,vrt2"
+IVOPTS?=	$(VOPTS) $(iOPTS)
 BVOPTS?=	$(VOPTS)
-BVIOPTS?= $(VIOPTS)
+BIVOPTS?=	$(IVOPTS)
 
 fix-mc:		text.map
 	sed '/^mu mc$$/s/^/#/' $< >a.map
@@ -72,7 +70,7 @@ clean-$1$2:
 download-files: $1$2.download
 $1$2.download: $($1)-$($2).otf $1$2
 	printf "\t%s\t%s\n" `sed -n '/^internalname\s/{s///;p;q}' $(1)$(2)` \
-		$$(abspath $$<) >$$@ || rm -f $$@
+		${EMBED}$$(abspath $$<) >$$@ || rm -f $$@
 clean-download::
 	rm -f $1$2.download
 endef
