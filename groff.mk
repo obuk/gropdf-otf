@@ -3,7 +3,6 @@
 usage:
 	@echo usage: ${MAKE} "[install|all|clean]"
 
-.SUFFIXES:	.stamp
 include Mk/*.mk
 
 groff.git?=	https://git.savannah.gnu.org/git/groff.git

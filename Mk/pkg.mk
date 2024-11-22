@@ -1,3 +1,4 @@
+.SUFFIXES:	.stamp
 %.pkg:	pkg.stamp
 	sudo apt-get install -y $*
 	@touch $@

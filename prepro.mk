@@ -1,7 +1,6 @@
 usage:
 	@echo usage: make "[install|all|clean]"
 
-.SUFFIXES:	.stamp
 include Mk/*.mk
 
 # App-grops-prepro script name
