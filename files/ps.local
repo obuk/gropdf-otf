@@ -23,7 +23,7 @@
 .ds fnH-default "-zoom \n[my:HR.zoom] -szoom \n[my:GR.zoom] G\""
 .nr my:CR.w \w'\f[CR]M\fP'
 .nr my:CR.h (\n[rst] - \n[rsb])
-.nr my:CR.size 1000\" XXXXX - Enter the size of the CR for the TR
+.nr my:CR.size 800\" XXXXX - Enter the size of the CR for the TR
 .nr my:CR.zoom (\n[my:CR.size] * \n[my:TR.h] / \n[my:CR.h])
 .ds fnC-default "-zoom \n[my:CR.zoom] M\""
 .\".if F CodeR .ds fnC-default "-zoom 800 -ftr Code\""
