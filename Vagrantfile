@@ -10,7 +10,9 @@ Vagrant.configure("2") do |config|
   end
   config.vm.synced_folder ".", "/vagrant"
   config.vm.provision :shell, inline: <<-SHELL
-  sudo -u vagrant -i make -C /vagrant clean all
+  sudo -u vagrant -i sudo apt-get update
+  sudo -u vagrant -i sudo apt-get install -y make
+  sudo -u vagrant -i make -C /vagrant clean install
   sudo -u vagrant -i make -C /vagrant sample
   SHELL
 end
