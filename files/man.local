@@ -12,7 +12,7 @@
 .\}
 .
 .\" Default heading font
-.ds HF HR\" or use groff option: -dFH=HR
+.if t .ds HF HB\" or use groff option: -dFH=HB
 .
 .\" Use headings as bookmarks.
 .if t \{\
@@ -37,8 +37,8 @@
 .  if '\*(.T'pdf' \
 .    nr mPDF 1
 .
-.rn UR an-ext:UR
-.rn UE an-ext:UE
+.rn UR an-UR
+.rn UE an-UE
 .de UR
 .  ds m1 \\$1\"
 .  ie \\n[mPDF] \{\
@@ -50,7 +50,7 @@
 .    do di URL-div
 .  \}
 .  el \{\
-.    an-ext:UR \\$@
+.    an-UR \\$@
 .  \}
 ..
 .
@@ -75,7 +75,7 @@
 .    nop \&\\$*\"
 .  \}
 .  el \
-.    an-old:UE \\$@
+.    an-UE \\$@
 ..
 .
 .if (\n[cR]=0)&(\n[mPDF]) \{\
