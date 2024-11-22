@@ -21,17 +21,16 @@ STY?=	R I B BI V IV BV BIV
 
 TEXTMAP?=	text.map
 TEXTENC?=	text.enc
-#OTFTODIT?=	perl ./otftodit.pl -c -e $(TEXTENC)
-OTFTODIT?=	perl ./files/otftodit.pl -c -e $(TEXTENC)
+OTFTODIT?=	perl ./files/otftodit.pl $(OTFTODIT_OPTS)
+OTFTODIT_OPTS?=	-c -e $(TEXTENC) -S
 EMBED?=
 
 ROPTS?=		-F palt="*,*,palt"
-iOPTS?=		-i 50 -m -a 12
-IOPTS?=		$(ROPTS) $(iOPTS)
+IOPTS?=		$(ROPTS) -i 50 -m -a 12
 BOPTS?=		$(ROPTS)
 BIOPTS?=	$(IOPTS)
 VOPTS?=		-V -F palt="*,*,vpal" -F vert="*,*,vrt2"
-IVOPTS?=	$(VOPTS) $(iOPTS)
+IVOPTS?=	$(VOPTS) -i 50 -a -12
 BVOPTS?=	$(VOPTS)
 BIVOPTS?=	$(IVOPTS)
 
@@ -44,7 +43,7 @@ clean::
 
 otftodit.pl:	plenv Encode.cpanm Getopt-Long.cpanm fonttools.pip
 
-define make_font
+define make_font?=
 all::	$1$2
 $1$2: $($1)-$($2).otf $($1)-$($2).afm otftodit.pl
 	@echo cd $(CURDIR) ';' set -x ';' \
