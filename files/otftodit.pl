@@ -5252,18 +5252,23 @@ sub f_test {
     if (open my ($fh), $file) {
 	local $_ = <$fh>;
 	close $fh;
-	return "otf" if length >= 4 && /^(ttcf|OTTO)/;
+	return "otf" if length >= 4 && /^OTTO/;
 	return "afm" if /^StartFontMetrics\b/;
     }
     "";
 }
 
-my ($otffile, $afmfile);
+my ($otffile, $afmfile, @unknown);
 
 for my $f (@ARGV[0..1]) {
     my $t = f_test($f);
-    $otffile = $f if $t eq 'otf';
-    $afmfile = $f if $t eq 'afm';
+    if ($t eq 'otf') {
+	$otffile = $f;
+    } elsif ($t eq 'afm') {
+	$afmfile = $f;
+    } else {
+	push @unknown, $f;
+    }
 }
 if ($afmfile) {
     shift @ARGV if $otffile;
@@ -5271,6 +5276,7 @@ if ($afmfile) {
     #$afmfile = "tx -afm $otffile | tee /tmp/a.afm |";
     $afmfile = "tx -afm $otffile |";
 }
+die "$prog: can't read @unknown as otf" if @unknown;
 
 #my $afm = $ARGV[0];
 my $afm = $afmfile;
@@ -5308,16 +5314,8 @@ my $descender;
 
 if ($otffile) {
     use Font::TTF::Font;
-    use Font::TTF::Ttc;
 
-    #if (my $ttc = Font::TTF::Ttc->open($otffile)) {
-    #    $otf = $ttc->{directs}[0];
-    #}
-
-    unless ($otf) {
-	$otf = Font::TTF::Font->open($otffile);
-    }
-
+    $otf = Font::TTF::Font->open($otffile);
     unless ($otf) {
 	croak "can't open $fontfile\n";
     }
@@ -5394,7 +5392,6 @@ my %ligatures;
 my (@encoding, %in_encoding);
 my (%width, %height, %depth);
 my (%left_side_bearing, %right_side_bearing);
-my @umap;
 
 #open(AFM, $afm) || croak("unable to open '$ARGV[0]': $!\n");
 warn "# $1\n" if $afm =~ /(.*?)\|$/;
@@ -5509,21 +5506,6 @@ while (<AFM>) {
 			    $gid = $subst;
 			    $cid = $gid2cid->[$gid];
 			    $n = $cid;
-			}
-		    }
-
-		    if ($cid == $cid_space) {
-			push @umap, [ $cid_space, "space" ];
-		    }
-
-		    for my $u (@{$gid_to_unicode{$gid}}) {
-			my @u = unpack "U*", $u;
-			my $hex = join '_' => map sprintf("%04X", $_), @u;
-			#textmap($cid, 'u'.$hex);
-			push @umap,[ $cid, 'u'.$hex ];
-			if (my $ud = $unicode_decomposed{$hex}) {
-			    #textmap($cid, 'u'.$ud);
-			    push @umap,[ $cid, 'u'.$ud ];
 			}
 		    }
 
@@ -5746,42 +5728,24 @@ while (<MAP>) {
 		next unless defined (my $cid = glyphname_to_cid($field[0]));
 		$field[0] = $cid;
 	    }
-	    textmap(@field);
+	    $nmap{$field[0]} += 0;
+	    $map{$field[0], $nmap{$field[0]}} = $field[1];
+	    $nmap{$field[0]} += 1;
+
+	    # There is more than one way to make a PS glyph name;
+	    # let us try Unicode names with both 'uni' and 'u' prefixes.
+	    my $utmp = $AGL_to_unicode{$field[0]};
+	    if (defined $utmp && $utmp =~ /^[0-9A-F]{4}$/) {
+		foreach my $unicodepsname ("uni" . $utmp, "u" . $utmp) {
+		    $nmap{$unicodepsname} += 0;
+		    $map{$unicodepsname, $nmap{$unicodepsname}} = $field[1];
+		    $nmap{$unicodepsname} += 1;
+		}
+	    }
 	}
     }
 }
 close(MAP);
-
-sub textmap {
-    my @field = @_;
-    return undef unless @field == 2;
-
-    $nmap{$field[0]} += 0;
-    $map{$field[0], $nmap{$field[0]}} = $field[1];
-    $nmap{$field[0]} += 1;
-
-    # There is more than one way to make a PS glyph name;
-    # let us try Unicode names with both 'uni' and 'u' prefixes.
-    my $utmp = $AGL_to_unicode{$field[0]};
-    if (defined $utmp && $utmp =~ /^[0-9A-F]{4}$/) {
-	foreach my $unicodepsname ("uni" . $utmp, "u" . $utmp) {
-	    $nmap{$unicodepsname} += 0;
-	    $map{$unicodepsname, $nmap{$unicodepsname}} = $field[1];
-	    $nmap{$unicodepsname} += 1;
-	}
-    }
-}
-
-
-{
-    my %seen;
-    for (@umap) {
-	next if $nmap{$_->[0]} && $_->[1] =~ /^u00../;
-	#next if $seen{$_->[0], $_->[1]}++;
-	next if $seen{$_->[1]}++;
-	textmap(@$_);
-    }
-}
 
 
 sub width_of {
@@ -5823,7 +5787,12 @@ $italic_angle = $opt_a if $opt_a;
 if (!$opt_x) {
     my %mapped;
     my $i = ($#encoding > 256) ? ($#encoding + 1) : 256;
-    foreach my $ch (sort keys %width) {
+    my $cmp = $iscidfont? sub { $a <=> $b } : sub {
+        my $ua = $AGL_to_unicode{$a} // "z";
+        my $ub = $AGL_to_unicode{$b} // "z";
+        $ua cmp $ub || $a cmp $b
+    };
+    foreach my $ch (sort $cmp keys %width) {
 	# add unencoded characters
 	if (!$in_encoding{$ch}) {
 	    $encoding[$i] = $ch;
@@ -5842,7 +5811,7 @@ if (!$opt_x) {
 		}
 	    }
 	}
-	else {
+	elsif (!$iscidfont) {
 	    my $u = "";		# the resulting groff glyph name
 	    my $ucomp = "";	# Unicode string before decomposition
 	    my $utmp = "";	# temporary value
@@ -5951,6 +5920,27 @@ if (!$opt_x) {
 		$map{$ch, "0"} = $u;
 	    }
 	}
+	else { # if ($iscidfont) {
+	    my $cid = $ch;
+	    my $gid = $cid2gid->[$cid];
+	    if ($cid == $cid_space) {
+		$nmap{$cid} += 0;
+		$map{$cid, $nmap{$cid}} = "space";
+		$nmap{$cid} += 1;
+	    }
+	    for my $u (@{$gid_to_unicode{$gid}}) {
+		my @u = unpack "U*", $u;
+		my $hex = join '_' => map sprintf("%04X", $_), @u;
+		$nmap{$cid} += 0;
+		$map{$cid, $nmap{$cid}} = 'u'.$hex;
+		$nmap{$cid} += 1;
+		if (my $dhex = $unicode_decomposed{$hex}) {
+		    $nmap{$cid} += 0;
+		    $map{$cid, $nmap{$cid}} = 'u'.$dhex;
+		    $nmap{$cid} += 1;
+		}
+	    }
+	}
     }
 }
 
@@ -6026,7 +6016,7 @@ $sw = $space_width if ($space_width);
 print("name $name\n");
 print("internalname $psname\n") if $psname;
 print("cidfont\n") if $iscidfont;
-if (@gsub_index || @gpos_index) {
+if ($otf) {
     print("opentype",
           @gsub_index ? " gsub=".join(',', @gsub_index) : (),
           @gpos_index ? " gpos=".join(',', @gpos_index) : (),
@@ -6129,7 +6119,7 @@ else {
 
 $italic_angle = $italic_angle*3.14159265358979323846/180.0;
 $slant = sin($italic_angle)/cos($italic_angle);
-$slant = 0 if $slant < 0;
+$slant = 0 if $slant < 0 && !$opt_vertical;
 
 print("\n");
 print("charset\n");
@@ -6200,32 +6190,38 @@ for (my $i = 0; $i <= $#encoding; $i++) {
 	}
 	printf("\t%d", $type);
 	printf("\t%d\t%s", $i, $ch);
-        if ($iscidfont) {
-            # $ch is cid
-            my $name = $map{$ch, "0"};
-            my $cid = $ch;
-            my $gid = $cid2gid->[$cid]; # xxxxx
-	    my @copts;
-            if (my ($unicode) = @{$gid_to_unicode{$gid}}) {
+	my @copts;
+	if ($iscidfont) {
+	    # $ch is cid
+	    my $name = $map{$ch, "0"};
+	    my $cid = $ch;
+	    my $gid = $cid2gid->[$cid]; # xxxxx
+	    if (my ($unicode) = @{$gid_to_unicode{$gid}}) {
 		push @copts, "unicode=".join '_', map { sprintf "%04X", $_ }
 		    unpack "n*", encode "UTF16-BE", $unicode;
 		if ($name =~ /^u([\dA-F_]+)$/) {
 		    my $u = pack "U*", map hex($_), split '_', $1;
-		    #pop @copts if $u eq $unicode;
+		    pop @copts if $u eq $unicode;
 		}
-            }
+	    }
 	    push @copts, "gid=$gid" if $gid != $cid;
 	    if ($gpos) {
 		while (my ($key, $value) = each %{$gpos->{$gid}}) {
-		    #push @copts, "$key=$value" if defined $value;
-		    #push @copts, "$key=$value" if $key !~ /^[XY]Advance$/ && defined $value;
-		    push @copts, "$key=$value" if $key =~ /^[XY]Placement$/ && defined $value;
+		    push @copts, "$key=$value"
+			if $key =~ /^[XY]Placement$/ && defined $value;
 		}
 	    }
-	    if (@copts) {
-		print "\t-- @copts";
+	} else {
+	    if (my $unicode = $AGL_to_unicode{$ch}) {
+		my $u16 = join '_', map { sprintf "%04X", $_ }
+		    unpack "n*", encode "UTF16-BE",
+		    pack "U*", map hex($_), split '_', $unicode;
+		push @copts, "unicode=$u16";
 	    }
-        }
+	}
+	if (@copts) {
+	    print "\t-- @copts";
+	}
 	printf("\n");
 	if (defined $nmap{$ch}) {
 	    for (my $j = 1; $j < $nmap{$ch}; $j++) {
@@ -6352,11 +6348,12 @@ sub ot_feature {
     my @lang;
     my @features = map {
 	my $languages = $otf->{$tag}{SCRIPTS}{$_};
-	push @lang, grep !$seen{$_}++, @{$languages->{LANG_TAGS}};
+	@lang = grep !$seen{$_}++, @{$languages->{LANG_TAGS}};
+	@lang = 'DFLT' unless @lang;
 	map @{$_->{FEATURES}},
 	    map $languages->{$_} || $languages->{DEFAULT},
 	    grep $lang eq '*' || /^$lang\s*$/i,
-	    @{$languages->{LANG_TAGS}};
+	    @lang;
     } @script;
 
     # filter  /wanted/, @features
