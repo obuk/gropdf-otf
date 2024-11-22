@@ -1,7 +1,6 @@
 usage:
 	@echo usage: make "[install|all|clean]"
 
-.SUFFIXES:	.stamp
 include Mk/*.mk
 
 GROPDF_CFG=	\
@@ -22,12 +21,13 @@ install::	${GROFF_FONT}/devpdf/DESC gropdf.plenv
 install::	gropdf gropdf.plenv pyftsubset.pyenv
 	sudo install -b -m755 $^ ${LOCAL_BIN}/
 
-gropdf.plenv:	gropdf Inline-C.cpanm Font-TTF.cpanm
+gropdf.plenv:	gropdf
 	echo "#!/bin/sh\n\
 	GROFF_USER=\$${GROFF_USER:-\$${USER:-${USER}}}\n\
 	HOME=\$$(getent passwd \$${GROFF_USER} | cut -d: -f6)\n\
 	export PLENV_ROOT=\"\$$HOME/.plenv\"\n\
 	exec \"\$$PLENV_ROOT/libexec/plenv\" exec perl ${LOCAL_BIN}/$< \"\$$@\"" >$@
+	echo "#exec \"\$$PLENV_ROOT/libexec/plenv\" exec perl -d:NYTProf ${LOCAL_BIN}/$< \"\$$@\"" >>$@
 
 pyftsubset.pyenv:	pyftsubset
 	echo "#!/bin/sh\n\
@@ -45,7 +45,7 @@ clean::
 VPATH+=	./files
 
 GROPDF_PL?=	gropdf-otf.pl
-gropdf:	${GROPDF_PL}
+gropdf:	${GROPDF_PL} Inline-C.cpanm Font-TTF.cpanm
 	cat $< | perl -w -e '${GROPDF_CFG}' ${GROFF_BIN}/gropdf >$@
 
 clean::
