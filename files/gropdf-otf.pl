@@ -953,10 +953,10 @@ sub fontfile {
         #'--desubroutinize',
         #'--passthrough-tables',
     );
-    print STDERR "# @pyftsubset\n" if $debug;
+    print STDERR "# @pyftsubset\n" if 0 && $debug;
     system @pyftsubset;
 
-    if ($debug) {
+    if (0 && $debug) {
         #my $f = substr $fn, 1;
         my $f = $fnt->{name};
         print STDERR "# cp $sub_font $f.otf\n";
@@ -3970,7 +3970,8 @@ sub LoadFont
                 for (split /\s+/, $fnt{opentype}) {
                     my ($f, $x) = split /=/;
                     next if defined $fnt{" \U$f\E"};
-                    die $@ unless __PACKAGE__->can($f);
+                    next if !defined $x;
+                    die "cant $f; $@" unless __PACKAGE__->can($f);
                     no strict 'refs';
                     $otf->{uc $f}->read;
                     $fnt{" \U$f\E"} = &$f($otf, split /,/, $x);
@@ -4008,6 +4009,8 @@ sub LoadFont
                 $fnt{" $_"} =
                     exists $otf->{'post'}{STRINGS}{lcfirst $_} ?
                     $otf->{'post'}{STRINGS}{lcfirst $_} :
+                    exists $otf->{'post'}{lcfirst $_} ?
+                    $otf->{'post'}{lcfirst $_} :
                     exists $otf->{'CFF '}->TopDICT->{lcfirst $_} ?
                     $otf->{'CFF '}->TopDICT->{lcfirst $_} :
                     exists $otf->{'CFF '}->TopDICT->{ucfirst $_} ?
