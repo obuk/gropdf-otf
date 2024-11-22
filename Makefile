@@ -26,9 +26,7 @@ clean::
 	${MAKE} -f gropdf.mk clean
 	${MAKE} -f prepro.mk clean
 	${MAKE} -f font-haranoaji.mk clean
-	${MAKE} -f font-han.mk clean
-	${MAKE} -f font-han-code-jp.mk clean
-	${MAKE} -f font-noto-cjk.mk clean
+	${MAKE} -f font-haranoaji-code.mk clean
 	rm -f *.git
 	rm -f *.pkg
 	rm -f *.cpanm
