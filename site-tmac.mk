@@ -6,8 +6,13 @@ VPATH+=		files
 
 all::	tmp/pdf.tmac tmp/ps.tmac
 
-install:: tmp/man.local tmp/mdoc.local tmp/pdf.tmac	\
+FILES?=	tmp/man.local tmp/mdoc.local tmp/pdf.tmac	\
 		pdf.local tmp/ps.tmac ps.local
+ifeq "${GROFF_VERSION}" "1.23.0"
+FILES+=	tmp/an.tmac
+endif
+
+install:: ${FILES}
 	sudo install -b -m644 $^ /etc/groff
 	cd /etc/groff && \
 	for f in $(notdir $^); do \
@@ -43,3 +48,7 @@ tmp/%.local:	%.local
 	mkdir -p tmp
 	[ -f /etc/groff/$(notdir $@).dist ]
 	cat /etc/groff/$(notdir $@).dist $< >$@
+
+tmp/an.tmac:	an.tmac
+	mkdir -p tmp
+	sed -E -e '/^[.] *it 1 an-input-trap/s/it /itc /' $< >$@
