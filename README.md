@@ -21,4 +21,4 @@ the opentype feature settings.
 
 In groff, four styles (R, B, I, BI) consisting of combinations of
 weights and shapes are usually associated with each family, but here,
-vertical writing styles (V, BV) are also associated.
+vertical writing styles (V, BV, IV, BIV) are also associated.
