@@ -13,7 +13,6 @@ all::	needrestart-auto
 	${MAKE} -f font-haranoaji.mk FAM=G clean install
 	${MAKE} -f font-haranoaji.mk FAM=M R=Medium B=Heavy clean install
 	${MAKE} -f font-haranoaji-code.mk clean install
-	${MAKE} GROPDF_DEBUG= sample
 
 needrestart-auto:
 	perl -e "eval for <>; exit 0 if \$$nrconf{restart} eq 'a'; exit 1" \
@@ -39,17 +38,41 @@ install::	all
 
 
 # sample
-GROFF?=		${GROFF_BIN}/groff -Tpdf -P-e -P-p${PAPERSIZE} -dpaper=${PAPERSIZE}
-GROPDF_DEBUG?=	-P-d -P--pdfver=1.4
+GROFF?=		${GROFF_BIN}/groff
+GROFF+=		-Tpdf -dpaper=${PAPERSIZE} \
+		$(patsubst %,-P%,${GROPDF_EMBED} ${GROPDF_DEBUG}\
+			$(if ${GROPDF_UCMAP},-u${GROPDF_UCMAP})\
+			$(if ${PAPERSIZE},-p${PAPERSIZE}))\
+		${PREPRO_DEBUG}
+GROPDF_DEBUG?=	-d --pdfver=1.4
+#GROPDF_EMBED?=	-e
+GROPDF_UCMAP?=	AUTO
+#PREPRO_DEBUG?=	-rpp:debug=1
 
 SAMPLE?=	groff gropdf groff.7 groff_font groff_char groff_out
 
 sample:	$(addsuffix .pdf, $(SAMPLE))
 
-%.pdf:	manpages-ja.pkg
-	path=`man -w -Lja $(basename $@)`; \
-	case $$path in *.gz) zcat $$path;; *) cat $$path;; esac | \
-	${GROFF} ${GROPDF_DEBUG} -Kutf8 -ktp -mja -mandoc - > $@
+L?=	ja
+%.pdf:	manpages-ja.pkg FORCE
+	get_path () { \
+	  if [ -f files/$* ]; \
+	  then echo files/$*; \
+	  else man -w `[ -n "$L" ] && echo -L$L` $$1; \
+	  fi \
+	}; \
+	cat_page () { \
+	  path=$$(get_path $$1); \
+	  case "$$path" in \
+	  "")   echo ".ps +2\n.sp\nNo manual entry for $$1";; \
+	  *.gz) zcat $$path;; \
+	  *)    cat  $$path;; \
+	  esac \
+	}; \
+	cat_page $* | ${GROFF} -Kutf8 -ktp `[ -n "$L" ] && echo -m$L` \
+		-mandoc - > $@
+
+FORCE:
 
 clean::
 	rm -f *.pdf

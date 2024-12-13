@@ -27,7 +27,7 @@ use Getopt::Long qw(:config bundling);
 use Encode qw(encode decode);
 use POSIX qw(mktime);
 
-our $VERSION = "2024.09.23";
+our $VERSION = "2024.12.13";
 
 use List::Util qw(min max sum uniq);
 use File::Temp qw/tempfile/;
@@ -39,6 +39,7 @@ $Data::Dumper::Terse = 1;
 use Font::TTF::Font;
 my $reduce_TJ = 1;
 my $reduce_d3 = 1;
+my $subset_mp = 1;
 
 use constant
 {
@@ -518,7 +519,7 @@ if (defined($unicodemap))
         ($ucmap)=(<F>);
         close(F);
     }
-    else
+    elsif (lc($unicodemap) eq 'auto')
     {
         Warn("failed to find '$unicodemap'; ignoring");
     }
@@ -759,7 +760,7 @@ foreach my $fontno (sort keys %fontlst)
         $glyphs.=join('',@{$fnt->{CHARSET}->[$j]});
     }
 
-    if (exists($fnt->{fontfile}))
+    if (exists($fnt->{fontfile}) && ($fnt->{embed} || $embedall))
     {
         $fnt->{FONTFILE}=BuildObj(++$objct,
                                    {'Length1' => 0,
@@ -838,16 +839,35 @@ foreach my $fontno (sort keys %fontlst)
         $fnt->{Differences}=\@differ;
         $fnt->{Widths}=\@widths;
         $fnt->{CharSet}=$CharSet;
-        $fnt->{'ToUnicode'}=$textenccmap if $j==0 and $CharSet=~m'/minus';
+        #$fnt->{'ToUnicode'}=$textenccmap if $j==0 and $CharSet=~m'/minus';
 
         $objct++;
         push(@fontdesc,EmbedFont($fontnm,$fnt));
         $pages->{'Resources'}->{'Font'}->{'F'.$fontnm}=$fontlst{$fontnm}->{OBJ};
-        $obj[$objct-2]->{DATA}->{'ToUnicode'}=$textenccmap if (exists($fnt->{ToUnicode}));
+        #$obj[$objct-2]->{DATA}->{'ToUnicode'}=$textenccmap if (exists($fnt->{ToUnicode}));
+	if (defined $unicodemap && lc($unicodemap) eq 'auto') {
+	    if (my $tounicode = $fnt->{' 2uni'}[$j]) {
+		my $cmapname = join '-', $fnt->{name}, $j, "Identity",
+		    $fnt->{vertical}? "V" : "H";
+		if (my $cmap = unicode_cmap($cmapname, $tounicode)) {
+		    $fnt->{'ToUnicode'}[$j] = $cmap;
+		    $obj[$objct-2]->{DATA}->{'ToUnicode'} = $cmap;
+		    if ($debug) {
+			print STDERR "# $fnt->{name}.$j: ToUnicode = $cmap -u $unicodemap\n";
+		    }
+		}
+	    }
+	} else {
+	    if ($j==0 and $CharSet=~m'/minus') {
+		if (my $cmap = $fnt->{ToUnicode} = $textenccmap) {
+		    $obj[$objct-2]->{DATA}->{'ToUnicode'} = $cmap;
+		}
+	    }
+	}
 
     }
 
-    if (exists($fnt->{fontfile}))
+    if (exists($fnt->{fontfile}) && ($fnt->{embed} || $embedall))
     {
 	if ($options & SUBSET and !($options & NOFILE))
 	{
@@ -889,49 +909,75 @@ foreach my $fontno (sort keys %fontlst)
     if ($fnt->{cidfont}) {
         my $DOWNLOAD = $DOWNLOAD{$fnt->{' FontName'}};
         $fnt->{' cid2uni'} = $DOWNLOAD->{' cid2uni'};
-        $DOWNLOAD->{ucmap} //= unicode_cmap($fnt);
+        $DOWNLOAD->{ucmap} //= unicode_cmap(
+	    $fnt->{' CMapName'}, $fnt->{' cid2uni'});
         GetObj($fnt->{font_resource})->{ToUnicode} = $DOWNLOAD->{ucmap}
             if $DOWNLOAD->{ucmap};
-        unless ($DOWNLOAD->{fontfile}) {
-            if ($embedall) {
-                if (my $fontfile = fontfile($f->{NM}, $fnt)) {
-                    $DOWNLOAD->{fontfile} = $fontfile;
-                }
-            }
-            if ($DOWNLOAD->{fontfile}) {
-                # flatedecode
-                my $p = GetObj($DOWNLOAD->{fontfile});
-                if ($gotzlib && ($options & COMPRESS) && !$p->{DATA}{Filter} &&
-                    !$debug) {
-                    $p->{STREAM} = Compress::Zlib::compress($p->{STREAM});
-                    $p->{DATA}{Filter} = '/FlateDecode';
-                    $p->{DATA}{Length} = length $p->{STREAM};
-                }
-            }
+	if ($fnt->{embed} || $embedall) {
+	    unless ($DOWNLOAD->{fontfile}) {
+		unless ($DOWNLOAD->{' FontName'}) {
+		    $DOWNLOAD->{' FontName'} = SubTag().$fnt->{' FontName'};
+		    $DOWNLOAD->{' tempfile'} = [
+			tempfile(DIR => '/tmp', SUFFIX => '.otf') ];
+		    my $sub_font = $DOWNLOAD->{' tempfile'}[1];
+		    if (!$subset_mp) {
+			subset_start($f->{NM}, $fnt, $sub_font);
+		    } else {
+			my $pid = fork;
+			if (!defined $pid) {
+			    die "can't fork for $fnt->{fontfile}";
+			} elsif ($pid == 0) {
+			    subset_start($f->{NM}, $fnt, $sub_font);
+			    exit 0;
+			} else {
+			    $DOWNLOAD->{' pid'} = $pid;
+			    print STDERR "# pid = $pid\n" if 0 && $debug;
+			}
+		    }
+		}
+	    }
         }
+    }
+}
 
-        $DOWNLOAD->{' FontName'} //= SubTag().$fnt->{' FontName'};
-        my $p = GetObj($fnt->{font_descriptor});
-        for ($DOWNLOAD->{fontfile}) {
-            $p->{FontFile3} = $_ if defined;
-        }
-        $p->{'FontName'} = "/".$DOWNLOAD->{' FontName'};
+
+foreach my $fontno (sort keys %fontlst) {
+    my $f = $fontlst{$fontno};
+    my $fnt = $f->{FNT};
+    if ($fnt->{cidfont}) {
+	my $DOWNLOAD = $DOWNLOAD{$fnt->{' FontName'}};
+	if ($fnt->{embed} || $embedall) {
+	    unless ($DOWNLOAD->{fontfile}) {
+		if ($subset_mp) {
+		    if (my $pid = $DOWNLOAD->{' pid'}) {
+			$DOWNLOAD->{' pid'} = undef;
+			print STDERR "# waitpid($pid, 0)\n" if 0 && $debug;
+			waitpid($pid, 0);
+		    }
+		}
+		my $sub_font = $DOWNLOAD->{' tempfile'}[1];
+		$DOWNLOAD->{fontfile} = subset_end($sub_font);
+		unlink $sub_font;
+		delete $DOWNLOAD->{' tempfile'};
+	    }
+	    my $p = GetObj($fnt->{font_descriptor});
+	    for ($DOWNLOAD->{fontfile}) {
+		$p->{FontFile3} = $_ if defined;
+	    }
+	    $p->{'FontName'} = "/".$DOWNLOAD->{' FontName'};
+	}
     }
 
 }
 
 
-sub fontfile {
-    my ($fn, $fnt) = @_;
-
-    #my $otf = $fnt->{' OTF'};
-    #return $fnt->{' OTF'}->{'CFF '}->as_string;
+sub subset_start {
+    my ($fn, $fnt, $sub_font) = @_;
 
     my @cids = keys %{$fnt->{' cid2uni'}};
     return undef if !@cids || @cids == 1 && $cids[0] == 0;;
     my @gids = map { $fnt->{' CID2GID'}->[$_] } @cids; # xxxxx
 
-    my ($sh, $sub_font) = tempfile(DIR => '/tmp', SUFFIX => '.otf');
     my ($gh, $gid_file) = tempfile(DIR => '/tmp', SUFFIX => '.txt');
     #my $gids = join ',', @gids;
     print $gh join(',', @gids), "\n";
@@ -953,22 +999,17 @@ sub fontfile {
         #'--desubroutinize',
         #'--passthrough-tables',
     );
-    print STDERR "# @pyftsubset\n" if 0 && $debug;
-    system @pyftsubset;
 
-    if (0 && $debug) {
-        #my $f = substr $fn, 1;
-        my $f = $fnt->{name};
-        print STDERR "# cp $sub_font $f.otf\n";
-        system "cp $sub_font $f.otf";
-	if (0) {
-	    if (open my ($fh), ">$f.cff") {
-		my $otf = $fnt->{' OTF'};
-		print $fh $otf->{'CFF '}->as_string;
-		close $fh;
-	    }
-	}
-    }
+    print STDERR "# @pyftsubset\n" if 0 && $debug;
+    my $rc = system @pyftsubset;
+    unlink $gid_file;
+
+    $rc;
+}
+
+
+sub subset_end {
+    my ($sub_font) = @_;
 
     my $font_stream;
     my $subtype;
@@ -988,8 +1029,7 @@ sub fontfile {
         }
         $subtype = "/OpenType";
     }
-
-    unlink $sub_font, $gid_file;
+    #unlink $sub_font;
 
     my $fontfile = BuildObj(++$objct, {
         "Subtype" => $subtype,
@@ -1200,10 +1240,7 @@ ref $f->{FNT}{t1flags}:
     if ($fnt->{usespace}) {
         my $space = 'u0020';
         my ($chf, $ch) = GetNAM($fnt, $space);
-        my $cid = $chf->[PSNAME];
-        $fnt->{' cid2nam'}{$cid} = $space;
-        $fnt->{' cid2uni'}{$cid} = decode "UTF16-BE",
-            pack "n*", map hex($_), split '_', $chf->[UNICODE];
+        AssignGlyph($fnt, $chf, $ch);
     }
 
     # Type 0 Font Dictionaries (Table 121)
@@ -1422,10 +1459,10 @@ sub w2_array {
 
 
 sub unicode_cmap {
-    my ($fnt) = @_;
-    return undef unless %{$fnt->{' cid2uni'}};
+    my ($cmapname, $tounicode) = @_;
+    return undef unless $tounicode && %$tounicode;
 
-    my $CMapName = $fnt->{' CMapName'},
+    my $cmaptype = 2;
     my $CIDSystemInfo = {
         "Registry" => "(Adobe)",
         "Ordering" => "(UCS)",
@@ -1433,48 +1470,26 @@ sub unicode_cmap {
     };
     my $ucmap = BuildObj(++$objct, {
         "Type" => "/CMap",
-        "CMapName" => "/$CMapName",
+        "CMapName" => "/$cmapname",
         "CIDSystemInfo" => $CIDSystemInfo,
     });
     PutField(\ my ($CIDSystemInfo_text), $CIDSystemInfo);
     chop($CIDSystemInfo_text);
-    if ($fnt->{' CMapType'} == 2) {
-        $obj[$objct]->{STREAM} = join "\n", grep !/^[%]/, split /\n/, <<endstream;
+    $obj[$objct]->{STREAM} = join "\n", grep !/^[%]/, split /\n/, <<endstream;
 /CIDInit /ProcSet findresource begin
 12 dict begin
 begincmap
-/CMapName /$CMapName def
-/CMapType $fnt->{' CMapType'} def
+/CMapName /$cmapname def
+/CMapType $cmaptype def
 /CIDSystemInfo $CIDSystemInfo_text def
-@{[ codespacerange([ map pack("U*", $_), keys %{$fnt->{' cid2uni'}} ]) ]}
-@{[ bfrange($fnt->{' cid2uni'}) ]}
+@{[ codespacerange([ map pack("U*", $_), keys %{$tounicode} ]) ]}
+@{[ bfrange($tounicode) ]}
 endcmap
 CMapName currentdict /CMap defineresource pop
 end
 end
 endstream
-        $obj[$objct]->{DATA}{Length} = length $obj[$objct]->{STREAM};
-
-    } elsif ($fnt->{' CMapType'} == 1) {
-        $obj[$objct]->{STREAM} = join "\n", grep !/^[%]/, split /\n/, <<endstream;
-/CIDInit /ProcSet findresource begin
-12 dict begin
-begincmap
-/CMapName /$CMapName def
-/CMapType $fnt->{' CMapType'} def
-/CIDSystemInfo $CIDSystemInfo_text def
-@{[ codespacerange([ values %{$fnt->{' cid2uni'}} ]) ]}
-@{[ cidrange($fnt->{' cid2uni'}) ]}
-endcmap
-CMapName currentdict /CMap defineresource pop
-end
-end
-endstream
-        $obj[$objct]->{DATA}{Length} = length $obj[$objct]->{STREAM};
-
-    } elsif (defined $fnt->{' CMapType'}) {
-        print STDERR "CMapType is: ", $fnt->{' CMapType'}, " (ignored).\n";
-    }
+    $obj[$objct]->{DATA}{Length} = length $obj[$objct]->{STREAM};
 
     $ucmap;
 }
@@ -1490,7 +1505,6 @@ sub bfrange {
     while (@k > 0) {
         my $i = 0;
         while ($i + 1 <= $#k) {
-            #last if $bfchar->{$k[$i]} + 1 != $bfchar->{$k[$i + 1]};
             last if $k[$i] + 1 != $k[$i + 1];
             my $a = [ map ord($_), split //, $bfchar->{$k[$i]} ];
             my $b = [ map ord($_), split //, $bfchar->{$k[$i + 1]} ];
@@ -1809,9 +1823,11 @@ sub LoadDownload
             s/#.*$//;
             next if $_ eq '';
             my ($foundry,$name,$file)=split(/\t+/);
+            my $star = 0;
             if (substr($file,0,1) eq '*')
             {
-                next if !$embedall;
+                #next if !$embedall;
+                $star = 1;
                 $file=substr($file,1);
             }
 
@@ -1824,7 +1840,14 @@ sub LoadDownload
                 next;
             }
 
-            $download{"$foundry $name"}=$file if !exists($download{"$foundry $name"});
+            #$download{"$foundry $name"}=$file if !exists($download{"$foundry $name"});
+
+            if (!exists($download{"$foundry $name"})) {
+                $download{"$foundry $name"} = {
+                    fontfile => $file,
+                    embed => !$star,
+                };
+            }
         }
 
         close($f);
@@ -3809,31 +3832,21 @@ sub LoadFont
     $foundry=$1 if $fontnm=~m/^(.*?)-/;
     my $stg=1;
     my %fnt;
-    my @fntbbox=(0,0,0,0);
-    my $capheight=0;
-    my $lastchr=0;
-    my $lastnm;
-    my $t1flags=0;
-    my $fixwid=-1;
-    my $ascent=0;
-    my $charset='';
     my %ngpos;
 
-    while (<$f>)
-    {
-        chomp;
+    if ($stg == 1) {
+	while (<$f>) {
+	    chomp;
 
-        s/^ +//;
-        s/^#.*// if $stg == 1;
-        next if $_ eq '';
+	    s/^ +//;
+	    s/^#.*//;
+	    next if $_ eq '';
 
-        if ($stg == 1)
-        {
             my ($key,$val)=split(' ',$_,2);
 
             $key=lc($key);
-            $stg=2,next if $key eq 'kernpairs';
-            $stg=3,next if lc($_) eq 'charset';
+            $stg=2,last if $key eq 'kernpairs';
+            $stg=3,last if lc($_) eq 'charset';
 
 	    # Lines in the groff_font file that have only $key and no
 	    # $val should evaluate to defined($key).  When prototyping,
@@ -3843,50 +3856,76 @@ sub LoadFont
             #$fnt{$key}=$val;
             $fnt{$key} = $val // '1';
         }
-        elsif ($stg == 2)
-        {
-            $stg=3,next if lc($_) eq 'charset';
+    }
 
-            my ($ch1,$ch2,$k)=split;
-        }
-        else
-        {
+    if ($stg == 2) {
+	while (<$f>) {
+	    chomp;
+
+	    s/^ +//;
+	    next if $_ eq '';
+
+	    $stg=3,last if lc($_) eq 'charset';
+
+	    my ($ch1,$ch2,$k)=split;
+	}
+    }
+
+    if ($stg == 3) {
+	while (<$f>) {
+	    chomp;
+
+	    s/^ +//;
+	    next if $_ eq '';
+
             my (@r)=split;
             my (@p)=split(',',$r[1]);
 
 	    if ($r[1] eq '"')
 	    {
-		$fnt{NAM}->{$r[0]}=$fnt{NAM}->{$lastnm};
+		#$fnt{NAM}->{$r[0]}=$fnt{NAM}->{$lastnm};
+		$fnt{NAM}->{$r[0]}=$fnt{NAM}->{$fnt{NO}->[-1]};
 		next;
 	    }
 
             $r[3]=oct($r[3]) if substr($r[3],0,1) eq '0';
             $r[0]='u0020' if $r[3] == 32;
-            $r[0]="u00".hex($r[3]) if $r[0] eq '---';
+
+	    # When $r[0] (name of char) is ---, the reason for setting
+	    # $r[0] to "u00".hex($r[3]) is to register the glyph using
+	    # $r[0] as the key.  However, $r[3] (code of char) does not
+	    # store the hexadecimal string, so for example, when $r[3]
+	    # is 14, $t[0] becomes u0020 (space). -- obuk
+
+            #$r[0] = "u00".hex($r[3]) if $r[0] eq '---';
+            $r[0] = "N'$r[3]'" if $r[0] eq '---';
+
             $r[4]=$r[0] if !defined($r[4]);
 
+	    my %opts;
+	    if ($r[5] && $r[5] eq '--') {
+		for (splice(@r, 6)) {
+		    my ($k, $v) = split '=';
+		    $opts{$k} = $v;
+		}
+		$r[5] = undef;
+	    }
+	    unless ($r[5]) {
+		if ($opts{unicode}) {
+		    $r[5] = $opts{unicode};
+		    delete $opts{unicode};
+		} elsif ($r[0] =~ /^u([\dA-F_]+)$/) {
+		    $r[5] = join '_', map { sprintf "%04X", $_ }
+			unpack "n*", encode "UTF16-BE",
+			pack "U*", map hex($_), split '_', $1;
+		}
+	    }
+
             if ($fnt{cidfont}) {
-                my %gpos;
-                if ($r[5] && $r[5] eq '--') {
-                    for (splice(@r, 6)) {
-                        my ($k, $v) = split '=';
-                        $gpos{$k} = $v;
-                    }
-                }
-                if ($gpos{unicode}) {
-                    $r[5] = $gpos{unicode};
-                    delete $gpos{unicode};
-                } else {
-                    if ($r[0] =~ /^u([\dA-F_]+)$/) {
-                        $r[5] = join '_', map { sprintf "%04X", $_ }
-                            unpack "n*", encode "UTF16-BE", pack "U*",
-                            map hex($_), split '_', $1;
-                    }
-                }
                 my $cid = $r[4];
-                my $gid = $gpos{gid} // $cid;
-                $ngpos{$gid} = \%gpos;
-                delete $gpos{gid};
+                my $gid = $opts{gid} // $cid;
+                $ngpos{$gid} = \%opts;
+                delete $opts{gid};
 
                 # The PSNAME also stores the cid, which does not have a
                 # leading '/' for visual distinction. -- obuk
@@ -3896,21 +3935,7 @@ sub LoadFont
             }
 
             $fnt{NO}->[$r[3]]=$r[0];
-            $lastnm=$r[0];
-            $lastchr=$r[3] if $r[3] > $lastchr;
-
-            # following lines are given in the $otf->{'OS/2'} table.
-            $fixwid=$p[0] if $fixwid == -1;
-            $fixwid=-2 if $fixwid > 0 and $p[0] != $fixwid;
-
-            $fntbbox[1]=-$p[2] if defined($p[2]) and -$p[2] < $fntbbox[1];
-            $fntbbox[2]=$p[0] if $p[0] > $fntbbox[2];
-            $fntbbox[3]=$p[1] if defined($p[1]) and $p[1] > $fntbbox[3];
-            $ascent=$p[1] if defined($p[1]) and $p[1] > $ascent and $r[3] >= 32 and $r[3] < 128;
-            $charset.='/'.$r[4] if defined($r[4]);
-            #$capheight=$p[1] if length($r[4]) == 1 and $r[4] ge 'A' and $r[4] le 'Z' and $p[1] > $capheight;
-            $capheight=$p[1] if $r[3] >= ord('A') and $r[3] <= ord('Z') and $p[1] > $capheight;
-        }
+	}
     }
 
     close($f);
@@ -3921,9 +3946,7 @@ sub LoadFont
     my $slant=0;
     $fnt{DIFF}=[];
     $fnt{WIDTH}=[];
-    $fnt{fntbbox}=\@fntbbox;
-    $fnt{ascent}=$ascent;
-    $fnt{capheight}=$capheight;
+    my $lastchr = $#{$fnt{NO}};
     $fnt{lastchr}=$lastchr;
     $fnt{NAM}->{''}=[0,-1,'/.notdef',-1,0,0,0];
     $slant=-$fnt{'slant'} if exists($fnt{'slant'});
@@ -3947,10 +3970,6 @@ sub LoadFont
     $fnt{'spacewidth'}=270 if !exists($fnt{'spacewidth'});
     Warn("Using nospace mode for font '$ofontnm'") if $fnt{nospace} == 1 and $options & USESPACE;
 
-    $t1flags|=2**0 if $fixwid > -1;
-    $t1flags|=(exists($fnt{'special'}))?2**2:2**5;
-    $t1flags|=2**6 if $fnt{slant} != 0;
-    $fnt{t1flags}=$t1flags;
     my $fontkey="$foundry $fnt{internalname}";
 
     Warn("\nFont '$fnt{internalname} ($ofontnm)' has $lastchr glyphs\n"
@@ -3959,7 +3978,9 @@ sub LoadFont
     if (exists($download{$fontkey}))
     {
         # Real font needs subsetting
-	$fnt{fontfile}=$download{$fontkey};
+	#$fnt{fontfile}=$download{$fontkey};
+	$fnt{fontfile} = $download{$fontkey}{fontfile};
+	$fnt{embed} = $download{$fontkey}{embed};
         if ($fnt{opentype} || $fnt{cidfont}) {
             my $otf = Font::TTF::Font->open($fnt{fontfile});
             $fnt{' OTF'} = $otf;
@@ -3995,7 +4016,6 @@ sub LoadFont
             };
 
             $fnt{' Encoding'} = $fnt{vertical}? "Identity-V" : "Identity-H";
-            $fnt{' CMapType'} = 2;
             $fnt{' CMapName'} = join '-', $fnt{name}, $fnt{' Encoding'};
 
             $otf->{name}->read;
@@ -4016,9 +4036,7 @@ sub LoadFont
                     exists $otf->{'CFF '}->TopDICT->{ucfirst $_} ?
                     $otf->{'CFF '}->TopDICT->{ucfirst $_} :
                     undef;
-                if (/^[iI]s/) {
-                    #$fnt{" $_"} = $fnt{" $_"}? 'true' : 'false';
-                }
+		#$fnt{" $_"} = $fnt{" $_"}? 'true' : 'false' if /^[iI]s/;
             }
 
             if ($fnt{' ItalicAngle'} == 0 && $fnt{slant}) {
@@ -4037,7 +4055,52 @@ sub LoadFont
 
             $fnt{' DW'} = 1000;
             $fnt{' DW2'} = [ 1000 + $fnt{' Descender'}, -1000 ];
-        }
+        } else {
+
+	    my $fixwid = -1;
+	    while (my ($k, $v) = each %{$fnt{NAM}}) {
+		if (ref $v && defined $v->[WIDTH]) {
+		    $fixwid = $v->[WIDTH] if $fixwid == -1;
+		    $fixwid = -2, last if $fixwid > 0 and $v->[WIDTH] != $fixwid;
+		}
+	    }
+
+	    my $capheight = -1;
+	    for ('A' .. 'Z') {
+		my $v = $fnt{NAM}{$_};
+		if (ref $v && defined $v->[RST]) {
+		    $capheight = $v->[RST] if $v->[RST] > $capheight;
+		}
+	    }
+
+	    my $ascent = 0;
+	    for my $code (32 .. 127) {
+		if (my $name = $fnt{NO}[$code]) {
+		    if (my $v = $fnt{NAM}{$name}) {
+			if (ref $v && defined $v->[RST]) {
+			    $ascent = $v->[RST] if $v->[RST] > $ascent;
+			}
+		    }
+		}
+	    }
+
+	    my @fntbbox = (0,0,0,0);
+	    while (my ($k, $v) = each %{$fnt{NAM}}) {
+		$fntbbox[1] = -$v->[RSB]  if defined($v->[RSB]) and -$v->[RSB] < $fntbbox[1];
+		$fntbbox[2] = $v->[WIDTH] if defined($v->[WIDTH]) and $v->[WIDTH] > $fntbbox[2];
+		$fntbbox[3] = $v->[RST]   if defined($v->[RST]) and $v->[RST] > $fntbbox[3];
+	    }
+
+	    $fnt{fntbbox} =   \@fntbbox;
+	    $fnt{ascent} =    $ascent;
+	    $fnt{capheight} = $capheight;
+
+	    my $t1flags = 0;
+	    $t1flags |= 2**0 if $fixwid > -1;
+	    $t1flags |= (exists($fnt{'special'}))? 2**2 : 2**5;
+	    $t1flags |= 2**6 if $fnt{slant} != 0;
+	    $fnt{t1flags} = $t1flags;
+
 #         my ($head,$body,$tail)=GetType1($download{$fontkey});
 #         $head=~s/\/Encoding .*?readonly def\b/\/Encoding StandardEncoding def/s;
 #         $fontlst{$fontno}->{HEAD}=$head;
@@ -4045,6 +4108,7 @@ sub LoadFont
 #         $fontlst{$fontno}->{TAIL}=$tail;
         #         $fno=++$objct;
         #       EmbedFont($fontno,\%fnt);
+	}
     }
     else
     {
@@ -5118,11 +5182,16 @@ sub AssignGlyph
     push(@{$fnt->{TRFCHAR}->[$chf->[MAJOR]]},$ch);
     $stream.="% Assign: $chf->[PSNAME] to $chf->[MAJOR]/$chf->[MINOR]\n" if $debug;
 
-    my $cid = $chf->[PSNAME];
-    $fnt->{' cid2nam'}{$cid} = $ch;
-    if (my $unicode = $fnt->{NAM}{$ch}[UNICODE]) {
-        $fnt->{' cid2uni'}{$cid} = decode "UTF16-BE",
-            pack "n*", map hex($_), split '_', $unicode;
+    if (my $u16 = $chf->[UNICODE]) {
+	my $u = decode "UTF16-BE", pack "n*", map hex($_), split '_', $u16;
+	if ($fnt->{cidfont}) {
+	    my $cid = $chf->[PSNAME];
+	    $fnt->{' cid2nam'}{$cid} = $ch;
+	    $fnt->{' cid2uni'}{$cid} = $u;
+	} else {
+	    $fnt->{' 2nam'}[$chf->[MAJOR]]{$chf->[MINOR]} = $ch;
+	    $fnt->{' 2uni'}[$chf->[MAJOR]]{$chf->[MINOR]} = $u;
+	}
     }
 }
 
