@@ -1,4 +1,4 @@
-#!/home/vagrant/.plenv/shims/perl
+#!/usr/bin/env perl
 # -*- Perl -*-
 # Copyright (C) 1989-2020 Free Software Foundation, Inc.
 #      Written by James Clark (jjc@jclark.com)
@@ -5270,13 +5270,18 @@ for my $f (@ARGV[0..1]) {
 	push @unknown, $f;
     }
 }
-if ($afmfile) {
-    shift @ARGV if $otffile;
-} elsif ($otffile) {
-    #$afmfile = "tx -afm $otffile | tee /tmp/a.afm |";
-    $afmfile = "tx -afm $otffile |";
+if ($otffile) {
+    if ($afmfile) {
+	shift @ARGV;
+    } else {
+	#$afmfile = "tx -afm $otffile | tee /tmp/a.afm |";
+	$afmfile = "tx -afm $otffile |";
+    }
+} else {
+    if (!$afmfile && @unknown) {
+	die "$prog: can't read @unknown as otf\n";
+    }
 }
-die "$prog: can't read @unknown as otf" if @unknown;
 
 #my $afm = $ARGV[0];
 my $afm = $afmfile;
@@ -5300,7 +5305,7 @@ while (my ($name, $unicode) = each %AGL_to_unicode) {
 
 =cut
 
-my %gid_to_unicode;
+my %gid_to_utf8;
 
 my ($verbose, $debug) = (0, 0);
 my $otf;
@@ -5345,7 +5350,7 @@ if ($otffile) {
 		$gid = $subst;
 	    }
 	}
-	push @{$gid_to_unicode{$gid}}, pack "U", $uv;
+	push @{$gid_to_utf8{$gid}}, pack "U", $uv;
     }
 
     my $umap = $otf->{cmap}->find_uvs->{val};
@@ -5358,7 +5363,7 @@ if ($otffile) {
 		    $gid = $subst;
 		}
 	    }
-	    push @{$gid_to_unicode{$gid}}, pack "U*", $uv, $uvs;
+	    push @{$gid_to_utf8{$gid}}, pack "U*", $uv, $uvs;
 	}
     }
 
@@ -5367,8 +5372,8 @@ if ($otffile) {
 	$cid_space = $gid2cid->[$gid_space];
     }
 
-    if (ref $gid_to_unicode{$gid_space}) {
-	$gid_to_unicode{$gid_space} = [ sort @{$gid_to_unicode{$gid_space}} ];
+    if (ref $gid_to_utf8{$gid_space}) {
+	$gid_to_utf8{$gid_space} = [ sort @{$gid_to_utf8{$gid_space}} ];
     }
 
     $otf->{'OS/2'}->read;
@@ -5572,6 +5577,7 @@ sub rotate {
     my ($angle, $x, $y) = @_;
     my $th = $angle * 3.14159265358979323846/180.0;
     ($x, $y) = map { int($_ + 0.5) } ($x * cos($th) - $y * sin($th), $x * sin($th) + $y * cos($th));
+    die "rotate: \$descender is not defined\n" unless defined $descender;
     $x += 1000 + $descender; $y += $descender;
     ($x, $y);
 }
@@ -5682,7 +5688,7 @@ sub gid_to_glyphname {
     my $gid = shift;
     my %seen;
     my @psname;
-    for my $u (@{$gid_to_unicode{$gid}}) {
+    for my $u (@{$gid_to_utf8{$gid}}) {
 	my @u = unpack "U*", $u;
 	my $hex = join '_' => map sprintf("%04X", $_), @u;
 	#push @psname, grep defined && !$seen{$_}++, @{$unicode_to_AGL{$hex}};
@@ -5787,11 +5793,7 @@ $italic_angle = $opt_a if $opt_a;
 if (!$opt_x) {
     my %mapped;
     my $i = ($#encoding > 256) ? ($#encoding + 1) : 256;
-    my $cmp = $iscidfont? sub { $a <=> $b } : sub {
-        my $ua = $AGL_to_unicode{$a} // "z";
-        my $ub = $AGL_to_unicode{$b} // "z";
-        $ua cmp $ub || $a cmp $b
-    };
+    my $cmp = $iscidfont? sub { $a <=> $b } : sub { $a cmp $b };
     foreach my $ch (sort $cmp keys %width) {
 	# add unencoded characters
 	if (!$in_encoding{$ch}) {
@@ -5928,7 +5930,7 @@ if (!$opt_x) {
 		$map{$cid, $nmap{$cid}} = "space";
 		$nmap{$cid} += 1;
 	    }
-	    for my $u (@{$gid_to_unicode{$gid}}) {
+	    for my $u (@{$gid_to_utf8{$gid}}) {
 		my @u = unpack "U*", $u;
 		my $hex = join '_' => map sprintf("%04X", $_), @u;
 		$nmap{$cid} += 0;
@@ -6193,15 +6195,14 @@ for (my $i = 0; $i <= $#encoding; $i++) {
 	my @copts;
 	if ($iscidfont) {
 	    # $ch is cid
-	    my $name = $map{$ch, "0"};
 	    my $cid = $ch;
 	    my $gid = $cid2gid->[$cid]; # xxxxx
-	    if (my ($unicode) = @{$gid_to_unicode{$gid}}) {
+	    if (my ($u8) = @{$gid_to_utf8{$gid}}) {
 		push @copts, "unicode=".join '_', map { sprintf "%04X", $_ }
-		    unpack "n*", encode "UTF16-BE", $unicode;
-		if ($name =~ /^u([\dA-F_]+)$/) {
+		    unpack "n*", encode "UTF16-BE", $u8;
+		if ($map{$ch, "0"} =~ /^u([\dA-F_]+)$/) {
 		    my $u = pack "U*", map hex($_), split '_', $1;
-		    pop @copts if $u eq $unicode;
+		    pop @copts if $u eq $u8;
 		}
 	    }
 	    push @copts, "gid=$gid" if $gid != $cid;
@@ -6212,7 +6213,9 @@ for (my $i = 0; $i <= $#encoding; $i++) {
 		}
 	    }
 	} else {
-	    if (my $unicode = $AGL_to_unicode{$ch}) {
+	    if ($map{$ch, "0"} =~ /^u([\dA-F_]+)$/) {
+		;
+	    } elsif (my $unicode = $AGL_to_unicode{$ch}) {
 		my $u16 = join '_', map { sprintf "%04X", $_ }
 		    unpack "n*", encode "UTF16-BE",
 		    pack "U*", map hex($_), split '_', $unicode;
