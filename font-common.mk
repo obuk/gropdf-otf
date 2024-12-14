@@ -21,7 +21,8 @@ STY?=	R I B BI V IV BV BIV
 
 TEXTMAP?=	text.map
 TEXTENC?=	text.enc
-OTFTODIT?=	perl ./files/otftodit.pl $(OTFTODIT_OPTS)
+OTFTODIT?=	perl ./files/otftodit.pl
+OTFTODIT+=	$(OTFTODIT_OPTS)
 OTFTODIT_OPTS?=	-c -e $(TEXTENC) -S
 EMBED?=
 

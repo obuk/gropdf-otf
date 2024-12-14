@@ -7,7 +7,7 @@ VPATH+=		files
 all::	tmp/pdf.tmac tmp/ps.tmac
 
 FILES?=	tmp/man.local tmp/mdoc.local tmp/pdf.tmac	\
-		pdf.local tmp/ps.tmac ps.local
+		pdf.local tmp/ps.tmac tmp/ps.local
 ifeq "${GROFF_VERSION}" "1.23.0"
 FILES+=	tmp/an.tmac
 endif
@@ -43,7 +43,8 @@ tmp/ps.tmac:	ps.tmac
 tmp/%.local:	%.local
 	cd /etc/groff && \
 	if [ ! -f $(notdir $@).dist ]; then \
-		[ -f $(notdir $@) ] && sudo mv $(notdir $@) $(notdir $@).dist; \
+		[ ! -f $(notdir $@) ] && sudo touch $(notdir $@); \
+		sudo mv $(notdir $@) $(notdir $@).dist; \
 	fi
 	mkdir -p tmp
 	[ -f /etc/groff/$(notdir $@).dist ]
