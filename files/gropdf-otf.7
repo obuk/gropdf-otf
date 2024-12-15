@@ -1,0 +1,662 @@
+'\" tp
+.\" -*- nroff -*-
+.
+.TH GROPDF-OTF 7
+.
+.de vs.ex
+.  nr VS.bak \\n[VS]
+.  nr VS (\\n[PS] * 120 / 100)
+.  vs \\n[VS]u
+..
+.
+.de vs.ja
+.  nr VS.bak \\n[VS]
+.  nr VS (\\n[PS] * 180 / 100)
+.  vs \\n[VS]u
+..
+.
+.de vs.bak
+.  nr VS \\n[VS.bak]
+.  vs \\n[VS]u
+..
+.
+.am1 EX
+.ps -0.5
+.\".in +1m
+.sp .3
+.vs.ex
+..
+.am1 EE
+.ps +0.5
+.\".in -1m
+.vs.bak
+..
+.
+.\" ------------------------------------------------------------------
+.SH NAME
+.\" ------------------------------------------------------------------
+.
+gropdf-otf \- gropdfでOTFを使う
+.
+.ig
+.\" ------------------------------------------------------------------
+.SH SYNOPSYS
+.\" ------------------------------------------------------------------
+.
+.EX
+git clone https://github.com/obuk/gropdf-otf.git
+cd gropdf-otf
+vagrant up
+vagrant ssh
+make -C /vagrant gropdf-otf.7.pdf
+.EE
+..
+.
+.\" ------------------------------------------------------------------
+.SH 日本語のフォントを使いやすくする
+.\" ------------------------------------------------------------------
+groffで、日本語のフォント(OTF)を使用して、
+日本語のPDFを出力してみましょう。
+.PP
+日本語のフォントはOTFやTTFが多いと思いますが、
+.BR gropdf (1)
+と
+.BR afmtodit (1)
+はPostScriptフォントを要求するため、
+TTFをPostScriptフォントに変換する (以前試したものが
+.UR https://github.com/obuk/use-groff
+use-groff
+.UE
+にあります)、
+あるいは、gropdfとafmtoditでOTFをサポートする必要があります。
+ここでは後者を試します。
+.
+.\" ------------------------------------------------------------------
+.SS gropdf と afmtodit で OTF をサポートする
+.\" ------------------------------------------------------------------
+.
+OTF (cidfont) をサポートするafmtodit (otftodit)
+とgropdf (gropdf-otf) を作成します。
+.
+.PP
+otftoditは、OTFから
+.BR groff_font (5)
+を出力します。
+.
+groffフォントMR、MI、MVを作成する例を示します。
+.EX
+$ OTF=HaranoAjiMincho-Regular.otf
+$ otftodit.pl -c -F palt="*,*,palt" $OTF text.map MR
+$ otftodit.pl -c -F palt="*,*,palt" -i 50 -m -a 12 $OTF text.map MI
+$ otftodit.pl -c -F palt="*,*,vpal" -F vert="*,*,vrt2" -V $OTF text.map MV
+.EE
+.
+otftoditは、OTFのために
+.UR https://github.com/obuk/font-ttf
+Font::TTF
+.UE
+(\c
+.UR https://learn.microsoft.com/ja-jp/typography/opentype/spec/cff
+CFF table
+.UE
+の一部を追加したもの) を使います。
+afmtoditのコードをほぼそのまま使用するため、
+OTFの他にAFMも使います。AFMは、tx (afdko) で作成します。
+.EX
+$ tx -afm fontfile.otf >fontfile.afm
+.EE
+.
+otftoditは、cidfontではpsnameの代りにcidを使用します。
+opentype featureは、charsetのmetricsやcidに反映されます。
+groff_font形式に納まらないもの (unicode値や配置等) は、
+コメントを使用します。
+.
+.PP
+gropdf-otfは、OTF (cidfont) のグリフをcidで識別し、
+EncodingにIdentity-HとIdentity-Vを使用します。
+ToUnicode CMapを出力させるには、オプション -uAUTO を指定します。
+.
+.\" ------------------------------------------------------------------
+.SS 日本語のフォントをインストールする
+.\" ------------------------------------------------------------------
+.
+.UR https://github.com/trueroad/HaranoAjiFonts
+原ノ味フォント
+.UE \c
+を明朝 M\fIx\fP、ゴチック G\fIx\fP、等幅 Code\fIx\fP
+としてインストールします (\fIx\fP はスタイルです)。
+.EX
+$ make -f font-haranoaji.mk clean install	# 明朝 M\fIx\fP、ゴチック G\fIx\fP
+.ig
+$ time make -f font-haranoaji.mk clean install  # 明朝 M\fIx\fP、ゴチック G\fIx\fP
+real	0m47.377s
+user	0m40.210s
+sys	0m4.274s
+..
+$ make -f font-haranoaji-code.mk clean install	# 等幅 Code\fIx\fP
+.ig
+$ time make -f font-haranoaji-code.mk clean install	# 等幅 Code\fIx\fP
+real	0m11.074s
+user	0m9.339s
+sys	0m1.424s
+..
+.EE
+M\fIx\fP とG\fIx\fP でインストールされるスタイルは
+R, I, B, BI (横書) と V, IV, BV, BIV (縦書) です。
+このうちI, BI, V, IV, BV, BIVは、PDFのTmオペレータ (座標変換) を使います。
+座標変換の例は
+.UR https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf#page=126
+Figure 13 \- Effects of Coordinate Transformations
+in PDF32000_2008.pdf
+.UE
+にあります。
+.
+.
+.\" ------------------------------------------------------------------
+.SS 日本語のフォントについて PFB と OTF を比較する
+.\" ------------------------------------------------------------------
+.
+日本語のフォントのインストール時間、日本語のマンページ
+.BR groff (7)
+のPDF作成時間等を表で示します。
+(データはこのファイルの中にコメントで埋めてあります。)
+.
+.TS
+tab(;);
+l c c
+l n n.
+;PFB;OTF
+T{
+フォントのインストール時間
+T};8m38.3s;47.4s
+T{
+groff.7.pdf の作成時間
+T};5.1s;10.7s
+.T&
+l r r.
+T{
+groff.7.pdf のファイルサイズ
+T};563,078;299,381
+.TE
+.PP
+PFBのインストールには
+.UR https://github.com/obuk/use-groff
+font-saurce.mk
+.UE 、
+OTFには
+.UR https://github.com/obuk/gropdf-otf
+font-haranoaji.mk
+.UE
+を使いました。
+OTFはフォントを変形せず、PDFのTmオペレータを使用するため、
+インストール時間が短縮され、PDFのファイルサイズも削減されました。
+しかし、PDFの作成時間は長くなりました。
+.ig
+.PP
+\u\(dg\d 後で埋め込みフォントの作成を複数のプロセスに分けたところ、
+10.7s から 6.7s に短縮できました。
+..
+.
+.
+.ig
+.\" use-groff
+.EX
+$ time make -f font-sauce.mk clean install  # .ttf => R, B, I, BI, V, BV
+real	8m38.311s
+user	5m50.095s
+sys	2m19.867s
+$ wc M{R,B,I,BI,V,BV}
+  77474  268068 1715866 MR
+  84180  288187 1824774 MB
+  75297  262748 1846960 MI
+  81981  282801 1953753 MBI
+  34805  125406  843741 MV
+  35531  127585  857713 MBV
+ 389268 1354795 9042807 total
+$ wc G{R,B,I,BI,V,BV}
+  40189  156215 1018473 GR
+  40397  156839 1022908 GB
+  38974  153785 1184634 GI
+  39182  154409 1187298 GBI
+  33347  121033  824587 GV
+  33347  121033  827739 GBV
+ 225436  863314 6065639 total
+$ time make -f font-source.mk clean install     # .otf => R, B, I, BI, V, BV
+real	14m59.488s
+user	12m42.744s
+sys	1m40.537s
+$ time make -f font-code.mk clean install       # .otf => R, B, I, BI
+real	5m58.152s
+user	5m0.168s
+sys	0m45.051s
+$ wc M{R,B,I,BI,V,BV}
+  68039  238794 1273631 MR
+  75275  260503 1366753 MB
+  68132  239073 1443780 MI
+  75376  260806 1535222 MBI
+  63557  224584 1186305 MV
+  70793  246293 1282361 MBV
+ 421172 1470053 8088052 total
+$ wc G{R,B,I,BI,V,BV}
+  39834  154201  901947 GR
+  39863  154289  903406 GB
+  39885  154354 1087285 GI
+  39916  154448 1087431 GBI
+  38631  149828  876215 GV
+  38660  149916  881712 GBV
+ 236789  917036 5737996 total
+$ time zcat /usr/share/man/ja/man7/groff.7.gz | \e
+groff -Tpdf -dpaper=a4 -P-e -P-pa4 -Kutf8 -ktp -mja -mandoc - > groff.7.pdf
+real	0m5.116s
+user	0m6.012s
+sys	0m0.158s
+$ ls -l groff.7.pdf
+-rw-rw-r-- 1 vagrant vagrant 563078 Dec 10 07:31 groff.7.pdf
+.EE
+.
+.\" groff-otf
+.EX
+$ time make -f font-haranoaji.mk clean install       # 明朝 M\fIx\fP、ゴチック G\fIx\fP
+real	0m47.377s
+.\"user	0m40.210s
+.\"sys	0m4.274s
+$ wc M{R,B,I,BI,V,BV,IV,BIV}
+  72645  237827 1327645 MR
+  76535  249492 1373078 MB
+  72646  237829 1455960 MI
+  76536  249494 1511656 MBI
+  30728  111580  716474 MV
+  30728  111579  719899 MBV
+  30729  111582  860884 MIV
+  30729  111581  883379 MBIV
+ 421276 1420964 8848975 total
+
+$ time make -f font-haranoaji-code.mk clean install  # 等幅 Code\fIx\fP
+real	0m11.074s
+.\"user	0m9.339s
+.\"sys	0m1.424s
+$ wc G{R,B,I,BI,V,BV,IV,BIV}
+  41600  144667  866057 GR
+  41759  145127  868084 GB
+  41601  144669  983309 GI
+  41760  145129  994475 GBI
+  30733  111576  716893 GV
+  30733  111575  721024 GBV
+  30734  111578  871833 GIV
+  30734  111577  886464 GBIV
+ 289654 1025898 6908139 total
+$ time zcat /usr/share/man/ja/man7/groff.7.gz | \e
+groff -Tpdf -dpaper=a4 -P-uAUTO -P-pa4 -Kutf8 -ktp -mja -mandoc - >groff.7.pdf
+real	0m10.730s
+user	0m11.833s
+sys	0m0.249s
+$ ls -l groff.7.pdf
+-rw-rw-r-- 1 vagrant vagrant 299381 Dec 10 07:53 groff.7.pdf
+.EE
+..
+.
+.\" ------------------------------------------------------------------
+.SH 日本語のフォントを使う
+.\" ------------------------------------------------------------------
+.
+日本語のフォントを使用する場合は、
+既存のフォントに似た日本語のフォントを、
+既存のフォントのグリフ検索を拡張する形で予め定義します。
+そして、グリフの太さや大きさ (高さ) を揃えます。
+.
+.PP
+調整にはやり直しが付きものですが、
+インストール時間の短縮で少し楽になったと思います。
+.
+.\" ------------------------------------------------------------------
+.SS TR や HR に日本語のグリフがあるように見せる
+.\" ------------------------------------------------------------------
+.
+.UR https://www.gnu.org/software/groff/manual/groff.html.node/Special-Fonts.html#index-fspecial
+fspecial
+.UE
+リクエストを使用して、T\fIx\fP, H\fIx\fP, C\fIx\fP に日本語のフォント (\c
+.UR https://www.gnu.org/software/groff/manual/groff.html.node/Special-Fonts.html
+スペシャルフォント
+.UE )
+を追加します。
+.
+.EX
+\&.fspecial T\fIx\fP M\fIx\fP
+\&.fspecial H\fIx\fP G\fIx\fP
+\&.fspecial C\fIx\fP Code\fIx\fP
+.EE
+.
+要求されたグリフはスペシャルフォントを含めて検索され、
+必要に応じてフォントは切り替わる様になります。
+.
+.\" ------------------------------------------------------------------
+.SS グリフの太さを調整する
+.\" ------------------------------------------------------------------
+.
+英字(T\fIx\fP と H\fIx\fP)と漢字(M\fIx\fP とG\fIx\fP)の
+グリフの太さを揃えます。
+太さはOTFの名前を構成する「\c
+.UR https://learn.microsoft.com/en-us/typography/opentype/spec/os2#usweightclass
+太さの名前 (weight class)
+.UE 」
+で決まるため、名前を参考にフォントを選択します。
+.br
+.mk
+.PS
+.ft CW
+line right 2.5 "\ef[TR]\s[+20]\f[TR]ABC漢字\fP\s[-20]\efP" invis
+.ft
+define caption_and_lines {
+move left 2.5 down 0.05
+line right 2.5 dotted
+move left 2.5 down 0.18
+line right 2.5 $1 invis
+move left 2.5 up 0.5
+line right 2.5 dotted
+}
+.ft TR
+caption_and_lines("図1. HaranoAjiMincho-Medium.otf")
+.PE
+.rt
+.in +3i
+.PS
+.ft CW
+line right 2.5 "\ef[TB]\s[+20]\f[TB]ABC漢字\fP\s[-20]\efP" invis
+.ft
+.ft TR
+caption_and_lines("図2. HaranoAjiMincho-Heavy.otf")
+.PE
+.in
+.mk
+.PS
+.ft CW
+line right 2.5 "\ef[HR]\s[+20]\f[HR]ABC漢字\fP\s[-20]\efP" invis
+.ft
+.ft TR
+caption_and_lines("図3. HaranoAjiGothic-Regular.otf")
+.PE
+.rt
+.in +3i
+.PS
+.ft CW
+line right 2.5 "\ef[HB]\s[+20]\f[HB]ABC漢字\fP\s[-20]\efP" invis
+.ft
+.ft TR
+caption_and_lines("図4. HaranoAjiGothic-Bold.otf")
+.PE
+.in
+.sp .5
+図のキャプションは、M\fIx\fP とG\fIx\fP に使われたOTFの名前です。
+M\fIx\fP とG\fIx\fP の作成方法は次のとおりです。
+.EX
+$ make -f font-haranoaji.mk FAM=M R=Medium B=Heavy clean install # MR, MB
+$ make -f font-haranoaji.mk FAM=G R=Regular B=Bold clean install # GR, GB
+.EE
+FAM はファミリ (デフォルトは M G)、
+R はローマン体の太さの名前 (デフォルトは Regular)、
+B は太字の太さの名前 (デフォルトは Bold) です。
+.
+.\" ------------------------------------------------------------------
+.SS グリフの大きさを調整する
+.\" ------------------------------------------------------------------
+.
+グリフの大きさ (高さ) は
+.UR https://www.gnu.org/software/groff/manual/groff.html.node/Selecting-Fonts.html#index-fzoom
+fzoom
+.UE
+で調整します。
+以下、M\fIx\fP、G\fIx\fP、C\fIx\fP を順に調整します。
+調整のためのコードは /etc/groff/ps.local にあります。
+好みに合わせて修正してください。
+.
+.IP 1. 5
+MRの高さをTRの高さ (文字 'M' の高さ) を合わせます。
+計算方法のイメージを示します。
+.EX
+MR.zoom(TR.height('M') / MR.height('M'))
+.EE
+.PS
+d = 0.03
+h = 0.308
+w1 = 4.0
+w2 = 1.5
+w = 5.5
+define top_and_bottom_lines {
+move left w down d
+line right w dotted
+move left w down d
+line right w dashed
+move left w up h*$1
+line right w dotted
+move left w up d
+line right w dashed
+}
+.ft CW
+line right w1 "\ef[TR]\s[+20]\f[TR]ABC漢字かなカナ\fP\s[-20]\efP" invis
+line right w2 "\ef[MR]\s[+20]\f[MR]XYZ\fP\s[-20]\efP" invis
+.ft
+top_and_bottom_lines(1)
+.PE
+.ft TR
+.ce
+図5. TRとMR
+.
+.IP 2.
+HRの高さをTRに合わせ、その後、GRの高さをHRに合わせます。
+計算方法は 1. と同様です。
+.EX
+HR.zoom(TR.height('M') / HR.height('M'))
+GR.zoom(HR.height('M') / GR.height('M'))
+.EE
+.PS
+.ft CW
+line right w1 "\ef[HR]\s[+20]\f[HR]ABC漢字かなカナ\fP\s[-20]\efP" invis
+line right w2 "\ef[GR]\s[+20]\f[GR]XYZ\fP\s[-20]\efP" invis
+.ft
+top_and_bottom_lines(1)
+.PE
+.ft TR
+.ce
+図6. HRとGR
+.
+.IP 3.
+.\" CRの高さをTRより少し低く (小さく) します。
+CRはコードの例示等に使われます。
+インデントに依存するものもあるので、行の折り返しが減る様に、
+本文で使われるTRより小さくします。
+.EX
+.in +1
+_________1_________2_________3_________4_________5_________6_________7__
+123456789012345678901234567890123456789012345678901234567890123456789012
+.in
+.EE
+.IP 3-2. 5
+CodeRの高さを 3. の CRの高さに合わせます。
+上の 1. と同様の計算方法です。
+.IP 3-3.
+等幅フォントは、簡単な図にも使われます。3-2. に近く、
+英字 \fIm\fP 字と漢字 \fIn\fP 字の幅が等しいCodeRの倍率を選びます。
+次表は、\fIm\fP:\fIn\fP とその倍率、3-2. との差、
+英字と漢字(かな)の表示例です。
+.br
+.nr my:CodeR.zoom*1.2  (1000 * 6 * \n[my:CR.w] / (5 * \n[my:CodeR.w]))         
+.nr my:CodeR.zoom*1.25 (1000 * 5 * \n[my:CR.w] / (4 * \n[my:CodeR.w]))        
+.nr my:CodeR.zoom*1.3  (1000 * 4 * \n[my:CR.w] / (3 * \n[my:CodeR.w]))         
+.nr my:CodeR.zoom*1.5  (1000 * 3 * \n[my:CR.w] / (2 * \n[my:CodeR.w]))         
+.nr my:CodeR.zoom*2.0  (1000 * 2 * \n[my:CR.w] / (1 * \n[my:CodeR.w]))         
+.mk
+.in +1
+.TS
+cf(HB) cf(HB) cf(HB) cf(HB)w(30)
+c r r l.
+T{
+\fIm\fP:\fIn\fP
+T}	T{
+倍率
+T}	T{
+差
+T}	T{
+.nf
+英字と漢字(かな)
+.fi
+T}
+_
+.sp .5
+2:1	\n[my:CodeR.zoom*2.0]	T{
+.nr CodeR.zoom*2.0-diff (\n[my:CodeR.zoom*2.0] - \n[my:CodeR.zoom])
+\n[CodeR.zoom*2.0-diff]
+T}	T{
+T}
+.sp .5
+3:2	\n[my:CodeR.zoom*1.5]	T{
+.nr CodeR.zoom*1.5-diff (\n[my:CodeR.zoom*1.5] - \n[my:CodeR.zoom])
+\n[CodeR.zoom*1.5-diff]
+T}	T{
+T}
+.sp .5
+4:3	\n[my:CodeR.zoom*1.3]	T{
+.nr CodeR.zoom*1.3-diff (\n[my:CodeR.zoom*1.3] - \n[my:CodeR.zoom])
+\n[CodeR.zoom*1.3-diff]
+T}	T{
+T}
+.sp .5
+5:4	\n[my:CodeR.zoom*1.25]	T{
+.nr CodeR.zoom*1.25-diff (\n[my:CodeR.zoom*1.25] - \n[my:CodeR.zoom])
+\n[CodeR.zoom*1.25-diff]
+T}	T{
+T}
+.TE
+.in -1
+.mk bottom
+.
+.\" --------------------
+.\" ex. 2:1
+.rt
+.sp 1.7
+.in +10.5
+.my:fconfig C -zoom \n[my:CR.zoom] -szoom \n[my:CodeR.zoom*2.0] Code
+.nf
+.vs \n[PS]u
+.ft CR
+.char | \h'-0.5n'\Z'\m[grey10]\(ba\m[]'\h'+0.5n'
+|AB|CD|EF|GH|IJ|KL|MN|OP|QR|ST|UV|WX|YZ|
+|あ|い|う|え|お|か|き|く|け|こ|さ|し|す|
+.rchar |
+.ft
+.vs
+.fi
+.my:fconfig C
+.in
+.mk here
+.sp (u;\n[bottom] - \n[here])
+.
+.\" --------------------
+.\" ex. 3:2
+.rt
+.sp 1.7
+.sp 1.5
+.in +10.5
+.my:fconfig C -zoom \n[my:CR.zoom] -szoom \n[my:CodeR.zoom*1.5] Code
+.nf
+.vs \n[PS]u
+.ft CR
+.char | \h'-0.5n'\Z'\m[grey10]\(ba\m[]'\h'+0.5n'
+|ABC|DEF|GHI|JKL|MNO|PQR|STU|VWX|YZ
+|あい|うえ|おか|きく|けこ|さし|すせ|そた|ち
+.rchar |
+.ft
+.vs
+.fi
+.my:fconfig C
+.in
+.mk here
+.sp (u;\n[bottom] - \n[here])
+.
+.\" --------------------
+.\" ex. 4:3
+.rt
+.sp 1.7
+.sp 3.0
+.in +10.5
+.my:fconfig C -zoom \n[my:CR.zoom] -szoom \n[my:CodeR.zoom*1.3] Code
+.nf
+.vs \n[PS]u
+.ft CR
+.char | \h'-0.5n'\Z'\m[grey10]\(ba\m[]'\h'+0.5n'
+|ABCD|EFGH|IJKL|MNOP|QRST|UVWX|YZ
+|あいう|えおか|きくけ|こさし|すせそ|たちつ|て
+.rchar |
+.ft
+.vs
+.fi
+.my:fconfig C
+.in
+.mk here
+.sp (u;\n[bottom] - \n[here])
+.
+.\" --------------------
+.\" ex. 5:4
+.rt
+.sp 1.7
+.sp 4.5
+.in +10.5
+.my:fconfig C -zoom \n[my:CR.zoom] -szoom \n[my:CodeR.zoom*1.25] Code
+.nf
+.vs \n[PS]u
+.ft CR
+.char | \h'-0.5n'\Z'\m[grey10]\(ba\m[]'\h'+0.5n'
+|ABCDE|FGHIJ|KLMNO|PQRST|UVWXY|Z
+|あいうえ|おかきく|けこさし|すせそた|ちつてと|な
+.rchar |
+.ft
+.vs
+.fi
+.my:fconfig C
+.in
+.mk here
+.sp (u;\n[bottom] - \n[here])
+.
+.sp .5
+いまのところ「差」の絶対値が最も小さいもの \fIm\fP:\fIn\fP 4:3 が選ばれます。
+図7に結果を示します。
+.
+.PS
+.my:fconfig C
+.ft CW
+line right w1 "\ef[CR]\fP\s[+20]\f[CR]ABC漢字かなカナ\fP\s[-20]\fP\efP" invis
+line right w2 "\ef[CodeR]\fP\s[+20]\f[CodeR]XYZ\fP\s[-20]\fP\efP" invis
+.ft
+top_and_bottom_lines(0.8)
+.PE
+.my:fconfig C
+.ce
+図7. CRとCodeR
+.
+.
+図の描画は、\fIm\fP:\fIn\fP 2:1 以外では簡単ではありません。
+(この部分は削除する方が良いかも)
+.
+.\" ------------------------------------------------------------------
+.SS 縦書の斜体は、
+.\" ------------------------------------------------------------------
+.
+縦書でグリフの右上が上に上がった斜体を作成するには、
+otftoditのオプション \-a \fIslant\fP に負の値を指定します。
+(正の値を指定すると、右下りの癖字になります。)
+.
+.nf
+.ps +10
+.vs +10
+.in +2
+.ti -1
+.ft GIV
+この世をば 我が世とぞ思ふ 望月の
+欠けたることも 無しと思へば
+.ft
+.fi
+.ps
+.vs
+.
+.PP
+縦書の斜体が不要なら、STYがIVとBIVを含まないようにします。
