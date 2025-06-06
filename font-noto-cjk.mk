@@ -35,7 +35,7 @@ AFM=	$(addsuffix .afm,${FONTNAMES})
 clean::
 	rm -f ${OTF}
 	rm -f ${AFM}
-	sudo apt-get remove -y fonts-noto-cjk
+	#sudo apt-get remove -y fonts-noto-cjk
 	rm -f fonts-noto-cjk.pkg
 
 include font-common.mk
