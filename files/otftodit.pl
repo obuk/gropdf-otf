@@ -5270,17 +5270,16 @@ for my $f (@ARGV[0..1]) {
 	push @unknown, $f;
     }
 }
-if ($otffile) {
-    if ($afmfile) {
+
+if ($afmfile) {
+    if ($otffile) {
 	shift @ARGV;
-    } else {
-	#$afmfile = "tx -afm $otffile | tee /tmp/a.afm |";
-	$afmfile = "tx -afm $otffile |";
     }
+} elsif ($otffile) {
+    #$afmfile = "tx -afm $otffile | tee /tmp/a.afm |";
+    $afmfile = "tx -afm $otffile |";
 } else {
-    if (!$afmfile && @unknown) {
-	die "$prog: can't read @unknown as otf\n";
-    }
+    warn "$prog: can't read @unknown as otf" if @unknown;
 }
 
 #my $afm = $ARGV[0];
@@ -5306,6 +5305,7 @@ while (my ($name, $unicode) = each %AGL_to_unicode) {
 =cut
 
 my %gid_to_utf8;
+my %gid_hint;
 
 my ($verbose, $debug) = (0, 0);
 my $otf;
@@ -5345,10 +5345,8 @@ if ($otffile) {
     $gid_space = $uv_gid->{0x20};
     $cid_space = $gid2cid->[$gid_space];
     while (my ($uv, $gid) = each %{$uv_gid}) {
-	if ($gsub) {
-	    if (my $subst = $gsub->{$gid}) {
-		$gid = $subst;
-	    }
+	if (my $subst = find_gsub($gid)) {
+	    $gid = $subst;
 	}
 	push @{$gid_to_utf8{$gid}}, pack "U", $uv;
     }
@@ -5356,24 +5354,24 @@ if ($otffile) {
     my $umap = $otf->{cmap}->find_uvs->{val};
     for my $uvs (keys %{$umap}) {
 	for my $uv (keys %{$umap->{$uvs}}) {
-	    my $gid = $umap->{$uvs}{$uv};
-	    $gid //= $uv_gid->{$uv};
-	    if ($gsub) {
-		if (my $subst = $gsub->{$gid}) {
-		    $gid = $subst;
-		}
+	    my $gid = $umap->{$uvs}{$uv} // $uv_gid->{$uv};
+	    if (my $subst = find_gsub($gid)) {
+		$gid = $subst;
 	    }
 	    push @{$gid_to_utf8{$gid}}, pack "U*", $uv, $uvs;
 	}
     }
 
-    if (my $subst = $gsub->{$gid_space}) {
+    if (my $subst = find_gsub($gid_space)) {
 	$gid_space = $subst;
-	$cid_space = $gid2cid->[$gid_space];
     }
+    $cid_space = $gid2cid->[$gid_space];
 
     if (ref $gid_to_utf8{$gid_space}) {
-	$gid_to_utf8{$gid_space} = [ sort @{$gid_to_utf8{$gid_space}} ];
+	$gid_to_utf8{$gid_space} = do {
+	    my %seen;
+	    [ grep !$seen{$_}++, chr(0x20), @{$gid_to_utf8{$gid_space}} ];
+	};
     }
 
     $otf->{'OS/2'}->read;
@@ -5388,6 +5386,7 @@ if ($otffile) {
 my $psname;
 my ($notice, $version, $fullname, $familyname, @comments); 
 my $iscidfont;
+my $characterset;
 my $italic_angle = 0;
 my (@kern1, @kern2, @kernx);
 my (%italic_correction, %left_italic_correction);
@@ -5434,6 +5433,9 @@ while (<AFM>) {
 	    die "$prog: specify OTF and/or AFM\n",
 		"usage: $prog -v\n" unless $otf;
 	}
+    }
+    elsif($field[0] eq "CharacterSet") {
+	$characterset = $field[1];
     }
     elsif($field[0] eq "ItalicAngle") {
 	$italic_angle = -$field[1];
@@ -5505,15 +5507,11 @@ while (<AFM>) {
 		if ($iscidfont) {
 		    my $cid = $n;
 		    my $gid = $cid2gid->[$cid];
-
-		    if ($gsub) {
-			if (my $subst = $gsub->{$gid}) {
-			    $gid = $subst;
-			    $cid = $gid2cid->[$gid];
-			    $n = $cid;
-			}
+		    if (my $subst = find_gsub($gid, "gsub")) {
+			$gid = $subst;
+			$cid = $gid2cid->[$gid];
+			$n = $cid;
 		    }
-
 		    my $width = $otf->{'hmtx'}{'advance'}[$gid] // 1000;
 		    if ($gpos) {
 			for ($gpos->{$gid}{XAdvance}) {
@@ -5663,20 +5661,24 @@ sub glyphname_to_cid {
 	    if $debug;
 	return undef;
     }
+    unicode_to_cid($uv);
+}
+
+
+sub unicode_to_cid {
+    my $uv = shift;
     my $gid = $otf->{'cmap'}->find_ms->{val}{hex $uv};
     unless (defined $gid) {
-	warn "$prog: unicode ($name) is not defined in \$otf->cmap.\n"
+	warn "$prog: unicode ($uv) is not defined in \$otf->cmap.\n"
 	    if $debug;
 	return undef;
     }
-    if ($gsub) {
-	if (my $subst = $gsub->{$gid}) {
-	    $gid = $subst;
-	}
+    if (my $subst = find_gsub($gid)) {
+	$gid = $subst;
     }
     my $cid = $gid2cid->[$gid];
     unless (defined $cid) {
-	warn "$prog: gid ($name) is not defined in \$otf->cff->{Charset}.\n"
+	warn "$prog: gid ($gid) is not defined in \$otf->cff->{Charset}.\n"
 	    if $debug;
 	return undef;
     }
@@ -5730,18 +5732,34 @@ while (<MAP>) {
 		 "the PostScript character 'space'";
 	}
 	else {
-	    if ($iscidfont) {
-		next unless defined (my $cid = glyphname_to_cid($field[0]));
-		$field[0] = $cid;
+	    my $utmp = $AGL_to_unicode{$field[0]};
+	    my @utmp;
+	    my %seen;
+	    for ($utmp) {
+		push @utmp, $_ if defined && !$seen{$_}++;
 	    }
+	    if ($iscidfont) {
+		#next unless defined (my $cid = glyphname_to_cid($field[0]));
+		next unless defined $utmp[0];
+		next unless defined (my $cid = unicode_to_cid($utmp[0]));
+		$field[0] = $cid;
+
+		my $gid = $cid2gid->[$cid];
+		for my $u8 (@{$gid_to_utf8{$gid}}) {
+		    my $u16 = join '_', map { sprintf "%04X", $_ }
+			unpack "n*", encode "UTF16-BE", $u8;
+		    for ($u16) {
+			push @utmp, $_ if !$seen{$_}++;
+		    }
+		}
+
+	    }
+
 	    $nmap{$field[0]} += 0;
 	    $map{$field[0], $nmap{$field[0]}} = $field[1];
 	    $nmap{$field[0]} += 1;
 
-	    # There is more than one way to make a PS glyph name;
-	    # let us try Unicode names with both 'uni' and 'u' prefixes.
-	    my $utmp = $AGL_to_unicode{$field[0]};
-	    if (defined $utmp && $utmp =~ /^[0-9A-F]{4}$/) {
+	    for my $utmp (@utmp) {
 		foreach my $unicodepsname ("uni" . $utmp, "u" . $utmp) {
 		    $nmap{$unicodepsname} += 0;
 		    $map{$unicodepsname, $nmap{$unicodepsname}} = $field[1];
@@ -5803,10 +5821,13 @@ if (!$opt_x) {
 	if ($nmap{$ch}) {
 	    for (my $j = 0; $j < $nmap{$ch}; $j++) {
 		if (defined $mapped{$map{$ch, $j}}) {
-		    print STDERR "$prog: AGL name"
-			 . " '$mapped{$map{$ch, $j}}' already mapped to"
-			 . " groff name '$map{$ch, $j}'; ignoring AGL"
-			 . " name '$ch'\n";
+		    my $entity_format = $iscidfont? "CID %d" : "AGL name '%s'";
+		    print STDERR "$prog: "
+			 . sprintf($entity_format, $mapped{$map{$ch, $j}})
+			 . " already mapped to"
+			 . " groff name '$map{$ch, $j}'; ignoring "
+			 . sprintf($entity_format, $ch)
+			 . "\n";
 		}
 		else {
 		    $mapped{$map{$ch, $j}} = $ch;
@@ -6017,7 +6038,7 @@ $sw = $space_width if ($space_width);
 
 print("name $name\n");
 print("internalname $psname\n") if $psname;
-print("cidfont\n") if $iscidfont;
+print("cidfont $characterset\n") if $iscidfont;
 if ($otf) {
     print("opentype",
           @gsub_index ? " gsub=".join(',', @gsub_index) : (),
@@ -6150,7 +6171,10 @@ for (my $i = 0; $i <= $#encoding; $i++) {
 	my $subscript_correction = 0;
 	if (defined $opt_i) {
 	    $italic_correction = $right_side_bearing{$ch} + $opt_i;
-	    $italic_correction = 0 if $italic_correction < 0;
+	    #$italic_correction = 0 if $italic_correction < 0;
+	    if (!$opt_vertical) { # xxxxx
+		$italic_correction = 0 if $italic_correction < 0;
+	    }
 	    $subscript_correction = $slant * $xheight * .8;
 	    $subscript_correction = $italic_correction if
 		$subscript_correction > $italic_correction;
@@ -6193,32 +6217,52 @@ for (my $i = 0; $i <= $#encoding; $i++) {
 	printf("\t%d", $type);
 	printf("\t%d\t%s", $i, $ch);
 	my @copts;
+	my $u8;
 	if ($iscidfont) {
 	    # $ch is cid
 	    my $cid = $ch;
 	    my $gid = $cid2gid->[$cid]; # xxxxx
-	    if (my ($u8) = @{$gid_to_utf8{$gid}}) {
-		push @copts, "unicode=".join '_', map { sprintf "%04X", $_ }
-		    unpack "n*", encode "UTF16-BE", $u8;
-		if ($map{$ch, "0"} =~ /^u([\dA-F_]+)$/) {
-		    my $u = pack "U*", map hex($_), split '_', $1;
-		    pop @copts if $u eq $u8;
-		}
-	    }
 	    push @copts, "gid=$gid" if $gid != $cid;
+	    if (my $hint = $gid_hint{$gid}) {
+		push @copts, $hint;
+	    }
 	    if ($gpos) {
 		while (my ($key, $value) = each %{$gpos->{$gid}}) {
 		    push @copts, "$key=$value"
+			#if $key =~ /^[XY](Placement|Advance)$/ && defined $value;
 			if $key =~ /^[XY]Placement$/ && defined $value;
 		}
 	    }
+	    ($u8) = @{$gid_to_utf8{$gid}};
 	} else {
-	    if ($map{$ch, "0"} =~ /^u([\dA-F_]+)$/) {
+	    if (my $unicode = $AGL_to_unicode{$ch}) {
+		$u8 = pack "U*", map hex($_), split '_', $unicode;
+	    }
+	}
+
+	if ($u8) {
+	    if (length $map{$ch, "0"} == 1 && $map{$ch, "0"} eq $u8) {
+		0 and do {
+		    say STDERR "# \$map{$ch, '$_'} = ", $map{$ch, $_} for 0;
+		};
+	    } elsif ($map{$ch, "0"} =~ /^u([\dA-F_]+)$/) {
 		;
-	    } elsif (my $unicode = $AGL_to_unicode{$ch}) {
+	    } else {
+		0 and do {
+		    for (0 .. $nmap{$ch} - 1) {
+			say STDERR "# \$map{$ch, '$_'} = ", $map{$ch, $_};
+		    }
+		};
+
+		# If the Unicode value cannot be obtained from the glyph
+		# name, or the Unicode value is ambiguous, [1] put
+		# unicode=xxxx (utf16) in the comment.
+
+		# [1] For glyphs that have multiple names (uXXXX), the
+		# resulting Unicode value is ambiguous.
+
 		my $u16 = join '_', map { sprintf "%04X", $_ }
-		    unpack "n*", encode "UTF16-BE",
-		    pack "U*", map hex($_), split '_', $unicode;
+		    unpack "n*", encode "UTF16-BE", $u8;
 		push @copts, "unicode=$u16";
 	    }
 	}
@@ -6243,6 +6287,25 @@ sub conv {
       ($_[0] < 0 ? -.5 : .5);
 }
 
+
+sub find_gsub {
+    my ($gid, $hint) = @_;
+    if ($gsub) {
+	my $start = $gid;
+	while (my $subst = $gsub->{$gid}) {
+	    if ($subst == $start) {
+		warn "gsub $start seems looping." if $debug;
+		last;
+	    }
+	    $gid = $subst;
+	}
+	if ($gid != $start) {
+	    $gid_hint{$gid} = $hint if $hint;
+	    return $gid;
+	}
+    }
+    undef;
+}
 
 sub gsub {
     my $otf = shift;
@@ -6320,8 +6383,9 @@ sub gpos {
 		    die "gpos: unknown \$_->{FORMAT}: $_->{FORMAT} in TYPE 2";
 		}
 	    }
-	} else {
-	    die "gpos: unknown \$value->{TYPE}: $value->{TYPE}";
+	}
+	else {
+	    die "gpos: unknown \$value->{TYPE}: $value->{TYPE} (index: $index)";
 	}
     }
     $gpos;
