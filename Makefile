@@ -9,8 +9,11 @@ all::	needrestart-auto
 	${MAKE} -f site-tmac.mk clean install
 	${MAKE} -f gropdf.mk clean install
 	${MAKE} -f prepro.mk clean install
-	${MAKE} -f font-haranoaji.mk clean install
+	#${MAKE} -f font-haranoaji.mk clean install
+	${MAKE} -f font-haranoaji.mk FAM=G clean install
+	${MAKE} -f font-haranoaji.mk FAM=M R=Medium B=Heavy clean install
 	${MAKE} -f font-haranoaji-code.mk clean install
+	${MAKE} -f font-ipamj.mk clean install
 	#${MAKE} GROPDF_DEBUG= sample
 
 needrestart-auto:
