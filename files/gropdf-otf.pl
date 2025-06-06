@@ -37,9 +37,7 @@ $Data::Dumper::Indent = 1;
 $Data::Dumper::Terse = 1;
 #use lib qw(/vagrant/font-ttf/lib);
 use Font::TTF::Font;
-my $reduce_TJ = 1;
-my $reduce_d3 = 1;
-my $subset_mp = 1;
+use Unicode::UCD qw/charblocks/;
 
 use constant
 {
@@ -51,6 +49,7 @@ use constant
     UNICODE             => 5,
     RST                 => 6,
     RSB                 => 7,
+    OPTGSUB             => 8,
 
     CHR                 => 0,
     XPOS                => 1,
@@ -78,6 +77,8 @@ use constant
     COMPRESS            => 4,
     NOFILE              => 8,
 
+    EMBEDGSUB           => 16,
+    CMAPFULL            => 32,
 };
 
 my %StdEnc=(
@@ -294,6 +295,24 @@ if($rc)
     $gotinline=1;
 }
 
+$rc = eval
+{
+    require Unicode::Normalize;
+    Unicode::Normalize->import();
+    1;
+};
+
+my $gotnorm;
+if($rc)
+{
+    $gotnorm=1;
+}
+else
+{
+    Warn("Perl module 'Unicode::Normalize' not available; cannot decompose"
+    . " this PDF");
+}
+
 my %cfg;
 
 $cfg{GROFF_VERSION}='@VERSION@';
@@ -417,7 +436,7 @@ my %ppsz=(
     'com10'=>[297,684],
 );
 
-my $ucmap=<<'EOF';
+(my $ucmap=<<'EOF') =~ s/[#;].*\n//gm;
 /CIDInit /ProcSet findresource begin
 12 dict begin
 begincmap
@@ -433,12 +452,16 @@ begincmap
 endcodespacerange
 1 beginbfrange
 <001f> <001f> <002d>
+#<008b> <008f> [ <00660066> <00660069> <0066006c> <006600660069> <00660066006c> ]
 endbfrange
 endcmap
 CMapName currentdict /CMap defineresource pop
 end
 end
 EOF
+
+# Table 119
+my $Predefined_CMap_names = qr/^Adobe-(GB1|CNS1|Japan1|Korea1|)-\d+$/;
 
 sub usage
 {
@@ -468,7 +491,7 @@ my $want_help=0;
 my $version=0;
 my $stats=0;
 my $unicodemap;
-my $options=7;
+my $options = SUBSET + USESPACE + COMPRESS;
 my $PDFver=1.7;
 my @idirs;
 
@@ -519,10 +542,6 @@ if (defined($unicodemap))
         ($ucmap)=(<F>);
         close(F);
     }
-    elsif (lc($unicodemap) eq 'auto')
-    {
-        Warn("failed to find '$unicodemap'; ignoring");
-    }
 }
 
 if ($PDFver != 1.4 and $PDFver != 1.7)
@@ -532,6 +551,24 @@ if ($PDFver != 1.4 and $PDFver != 1.7)
 }
 
 $PDFver=int($PDFver*10)-10;
+
+my $reduce_TJ = 1;
+my $reduce_d3 = 1;	# reduces the number of decimal places
+my $subset_mp =	1;	# performs subsetting in multiple processes
+my $show_subset_etime = 0;	# Show execution time of pyftsubset
+my $prefer_utf16 = 1;	# reduces encoding/decoding by using utf16 as is
+my $cidfontcmap = 1;	# generate ToUnicode CMap for cidfont
+my $reduce_cmap = ($options & CMAPFULL) == 0;
+
+$show_subset_etime = 1 if $subset_mp && $debug;
+if ($show_subset_etime) {
+    $show_subset_etime = 0
+	unless eval {
+	    require Time::HiRes;
+	    Time::HiRes->import(qw/gettimeofday tv_interval/);
+	    1;
+	};
+}
 
 # Search for 'font directory': paths in -f opt, shell var
 # GROFF_FONT_PATH, default paths
@@ -732,13 +769,19 @@ my $info=BuildObj(++$objct,\%info);
 
 PutObj($objct);
 
+my $tounicode_default;
+parse_cmap($tounicode_default = {}, $ucmap) if $ucmap;
+
+my @cidfontno;
+
 foreach my $fontno (sort keys %fontlst)
 {
     my $f=$fontlst{$fontno};
     my $fnt=$f->{FNT};
 
-    # Separate the cid font output process into PutCIDFont().
-    PutCIDFont($fontno), next if $fnt->{cidfont}; # xxxxx
+    # Separates the output process for cidfonts from the output process
+    # for Type1 fonts.
+    push(@cidfontno, $fontno), next if $fnt->{cidfont};
 
     # Type1
     my $nam=$fnt->{NAM};
@@ -839,28 +882,64 @@ foreach my $fontno (sort keys %fontlst)
         $fnt->{Differences}=\@differ;
         $fnt->{Widths}=\@widths;
         $fnt->{CharSet}=$CharSet;
-        #$fnt->{'ToUnicode'}=$textenccmap if $j==0 and $CharSet=~m'/minus';
+
+	# In groff, minus (\-) is output as \x{1f}, which is rewritten to \x{2d}
+	# in gropdf's default ToUnicode CMap ($ucmap).  This rewriting only
+	# happens if the font has encoding text.enc specified.
+
+	#$fnt->{'ToUnicode'}=$textenccmap if $j==0 and $CharSet=~m'/minus';
 
         $objct++;
         push(@fontdesc,EmbedFont($fontnm,$fnt));
         $pages->{'Resources'}->{'Font'}->{'F'.$fontnm}=$fontlst{$fontnm}->{OBJ};
         #$obj[$objct-2]->{DATA}->{'ToUnicode'}=$textenccmap if (exists($fnt->{ToUnicode}));
-	if (defined $unicodemap && lc($unicodemap) eq 'auto') {
-	    if (my $tounicode = $fnt->{' 2uni'}[$j]) {
-		my $cmapname = join '-', $fnt->{name}, $j, "Identity",
-		    $fnt->{vertical}? "V" : "H";
-		if (my $cmap = unicode_cmap($cmapname, $tounicode)) {
-		    $fnt->{'ToUnicode'}[$j] = $cmap;
-		    $obj[$objct-2]->{DATA}->{'ToUnicode'} = $cmap;
-		    if ($debug) {
-			print STDERR "# $fnt->{name}.$j: ToUnicode = $cmap -u $unicodemap\n";
+
+	# The original code in gropdf only checked for /minus, but here new code
+	# parses $ucmap to determine what to check.  Because EXAMPLE 2 in 9.10.3
+	# ToUnicode CMaps in PDF32000_2008.pdf defines characters other than
+	# /minus, such as ligatures.
+
+	my $tounicode = $fnt->{' 2uni'}[$j];
+	if ($tounicode) {
+
+	    my $data = $obj[$objct - 2]->{DATA};
+	    my $tounicode_reduced;
+	    my $dirty = 0;
+
+	    my $use_tounicode_default = 0;
+	    if ($j == 0 && $fnt->{encoding} && $fnt->{encoding} eq 'text.enc' &&
+		$tounicode_default) {
+		$use_tounicode_default = 1;
+	    }
+	    for (keys %$tounicode) {
+		my $u;
+		if ($use_tounicode_default &&
+		    defined ($u = $tounicode_default->{$_})) {
+		    $tounicode_reduced->{$_} = $u;
+		} elsif (defined ($u = $tounicode->{$_})) {
+		    my @u = $u =~ /(?i:[\dA-F]{1,4})/g;
+		    if (@u == 1 && hex($u[0]) == $_) {
+			;
+		    } else {
+			$tounicode_reduced->{$_} = $u;
+			$dirty++;
 		    }
 		}
 	    }
-	} else {
-	    if ($j==0 and $CharSet=~m'/minus') {
-		if (my $cmap = $fnt->{ToUnicode} = $textenccmap) {
-		    $obj[$objct-2]->{DATA}->{'ToUnicode'} = $cmap;
+
+	    if ($dirty) {
+		my $cmap = make_cmap(
+		    2,
+		    "/".$fnt->{' CMapName'},
+		    $fnt->{' CIDSystemInfo'},
+		    $tounicode_reduced,
+		);
+		for ($cmap) {
+		    $fnt->{ToUnicode} = $data->{ToUnicode} = $_ if defined;
+		}
+	    } else {
+		for ($textenccmap) {
+		    $fnt->{ToUnicode} = $data->{ToUnicode} = $_ if defined;
 		}
 	    }
 	}
@@ -899,91 +978,251 @@ foreach my $fontno (sort keys %fontlst)
 }
 
 
-# pass2
-my %DOWNLOAD;   # xxxxx
+# The following code is the process to output cidfont.
 
-foreach my $fontno (sort keys %fontlst)
-{
+# First, for each $fnt->{internalname}, cid2uni and cid2nam are
+# merged. However, those that reference the GSUB table are merged
+# separately, because the font will need to be embedded later.
+
+my %mfont;   # xxxxx
+
+for my $fontno (@cidfontno) {
     my $f = $fontlst{$fontno};
     my $fnt = $f->{FNT};
-    if ($fnt->{cidfont}) {
-        my $DOWNLOAD = $DOWNLOAD{$fnt->{' FontName'}};
-        $fnt->{' cid2uni'} = $DOWNLOAD->{' cid2uni'};
-        $DOWNLOAD->{ucmap} //= unicode_cmap(
-	    $fnt->{' CMapName'}, $fnt->{' cid2uni'});
-        GetObj($fnt->{font_resource})->{ToUnicode} = $DOWNLOAD->{ucmap}
-            if $DOWNLOAD->{ucmap};
-	if ($fnt->{embed} || $embedall) {
-	    unless ($DOWNLOAD->{fontfile}) {
-		unless ($DOWNLOAD->{' FontName'}) {
-		    $DOWNLOAD->{' FontName'} = SubTag().$fnt->{' FontName'};
-		    $DOWNLOAD->{' tempfile'} = [
-			tempfile(DIR => '/tmp', SUFFIX => '.otf') ];
-		    my $sub_font = $DOWNLOAD->{' tempfile'}[1];
-		    if (!$subset_mp) {
-			subset_start($f->{NM}, $fnt, $sub_font);
-		    } else {
-			my $pid = fork;
-			if (!defined $pid) {
-			    die "can't fork for $fnt->{fontfile}";
-			} elsif ($pid == 0) {
-			    subset_start($f->{NM}, $fnt, $sub_font);
-			    exit 0;
-			} else {
-			    $DOWNLOAD->{' pid'} = $pid;
-			    print STDERR "# pid = $pid\n" if 0 && $debug;
-			}
+
+    $fnt->{embed} = 1 if ($options & EMBEDGSUB) && $fnt->{opentype}{gsub}; # xxxxx
+
+    my $fontgroup = join '#', grep defined, $fnt->{internalname}, $fnt->{opentype}{gsub};
+    my $mfont = $mfont{$fontgroup} //= {};
+
+    unless (%$mfont) {
+	$mfont->{f} = $f;
+
+	# Type 0 Font dictionary (Table 121)
+
+	my $font_resource = BuildObj(++$objct, {
+	    Type => "/Font",
+	    Subtype => "/Type0",
+	    BaseFont => "/".$fnt->{internalname},
+	    Encoding => "/".$fnt->{' Encoding'},
+	    #DescendantFonts => [ $cid_font ], # [ 7 0 R ],
+	    # ToUnicode => undef, # 8 0 R,
+	});
+	$mfont->{font_resource} = $font_resource;
+
+	# Font descriptor (Table 122)
+
+	my $flags = 0;
+	#$flags += 1 << ( 1 - 1); # FixedPitch
+	$flags += 1 << ( 1 - 1) if $fnt->{' isFixedPitch'};
+	#$flags += 1 << ( 2 - 1); # Serif
+	$flags += 1 << ( 2 - 1) if $fnt->{internalname} =~ /Serif/i;
+	#$flags += 1 << ( 3 - 1); # Symbolic
+	$flags += 1 << ( 3 - 1) if $fnt->{special};
+	#$flags += 1 << ( 4 - 1); # Script
+	#$flags += 1 << ( 6 - 1); # Nonsymbolic
+	$flags += 1 << ( 6 - 1) if !$fnt->{special};
+	#$flags += 1 << ( 7 - 1); # Italic
+	$flags += 1 << ( 7 - 1) if $fnt->{' ItalicAngle'};
+	#$flags += 1 << (17 - 1); # AllCap
+	#$flags += 1 << (18 - 1); # SmallCap
+	#$flags += 1 << (19 - 1); # ForceBold
+
+	my $font_descriptor = BuildObj(++$objct, {
+	    Type        => "/FontDescriptor",
+	    FontName    => "/".$fnt->{internalname},
+	    Flags       => $flags,
+	    FontBBox    => $fnt->{' FontBBox'},
+	    ItalicAngle => $fnt->{' ItalicAngle'},
+	    Ascent      => $fnt->{' Ascender'},
+	    Descent     => $fnt->{' Descender'},
+	    CapHeight   => $fnt->{' CapHeight'},
+	    StemV       => 0,
+	    #FontFile3"  => "", # 9 0 R
+	});
+	#GetObj($cid_font)->{FontDescriptor} = $font_descriptor;
+	$mfont->{font_descriptor} = $font_descriptor;
+    }
+
+    my $fontnm = $fontno;
+    $fontlst{$fontnm}->{OBJ} = $mfont->{font_resource};
+    $pages->{'Resources'}->{'Font'}->{'F'.$fontnm} = $fontlst{$fontnm}->{OBJ};
+
+    if ($fnt->{usespace}) {
+        my $space = 'u0020';
+        my ($chf, $ch) = GetNAM($fnt, $space);
+        AssignGlyph($fnt, $chf, $ch);
+    }
+    while (my ($k, $v) = each %{$fnt->{' cid2uni'}}) {
+	$mfont->{' cid2uni'}{$k} = $v;
+    }
+    while (my ($k, $v) = each %{$fnt->{' cid2nam'}}) {
+	$mfont->{' cid2nam'}{$k} = $v;
+    }
+    if ($reduce_cmap) {
+	while (my ($k, $v) = each %{$fnt->{' optgsub'}}) {
+	    $mfont->{' optgsub'}{$k} = $v;
+	}
+    }
+}
+
+# cidfont pass 2
+
+for my $fontgroup (keys %mfont) {
+    my $mfont = $mfont{$fontgroup};
+    $mfont->{order} = keys %{$mfont->{' cid2uni'}};
+}
+
+my @mfont = map { $mfont{$_} }
+    sort { $mfont{$a}{order} <=> $mfont{$b}{order} }
+    grep { $mfont{$_}{order} }
+    keys %mfont;
+
+my @mfont_embedding;
+
+for my $mfont (@mfont) {
+    my $f = $mfont->{f};
+    my $fnt = $f->{FNT};
+
+    # CIDFont dictionary (Table 117)
+
+    my $cid_font = BuildObj(++$objct, {
+	Type => "/Font",
+	Subtype => "/CIDFontType0",
+	BaseFont => "/".$fnt->{internalname},
+	CIDSystemInfo => $fnt->{' CIDSystemInfo'},
+	# FontDescriptor => undef,
+	FontDescriptor => $mfont->{font_descriptor},
+    });
+    $mfont->{cid_font} = $cid_font;
+
+    if (my $p = GetObj($mfont->{cid_font})) {
+	if ($fnt->{vertical}) {
+	    my $w2 = w2_array($fnt, $mfont->{' cid2nam'});
+	    if ($w2 && @$w2) {
+		$p->{DW2} = $fnt->{' DW2'};
+		$p->{W2} = $w2;
+	    }
+	} else {
+	    my $w = w_array($fnt, $mfont->{' cid2nam'});
+	    if ($w && @$w) {
+		$p->{DW} = $fnt->{' DW'};
+		$p->{W} = $w;
+	    }
+	}
+    }
+
+    if (my $p = GetObj($mfont->{font_resource})) {
+	$p->{DescendantFonts} = [ $cid_font ];
+	my $tounicode = {};
+	if ($reduce_cmap) {
+	    if ($fnt->{embed} || $embedall) {
+		$tounicode = $mfont->{' cid2uni'};
+	    } else {
+		my $name = join '-',
+		    $fnt->{' CIDSystemInfo'}{Registry} =~ /^\((.*?)\)$/,
+		    $fnt->{' CIDSystemInfo'}{Ordering} =~ /^\((.*?)\)$/,
+		    $fnt->{' CIDSystemInfo'}{Supplement};
+		if ($name =~ /$Predefined_CMap_names/) {
+		    for my $cid (keys %{$mfont->{' optgsub'}}) {
+			$tounicode->{$cid} = $mfont->{' cid2uni'}{$cid};
 		    }
+		} else {
+		    $tounicode = $mfont->{' cid2uni'};
 		}
 	    }
-        }
+	} else {
+	    $tounicode = $mfont->{' cid2uni'};
+	}
+	if (%$tounicode) {
+	    $p->{ToUnicode} = make_cmap(
+		2,
+		"/".$fnt->{' CMapName'},
+		$fnt->{' CIDSystemInfo'},
+		$tounicode,
+	    );
+	}
+    }
+
+    if ($fnt->{embed} || $embedall) {
+	unless ($mfont->{subsetting}) {
+	    $mfont->{subsetting} = 1;
+	    $mfont->{tempfile} = [
+		tempfile(DIR => '/tmp', SUFFIX => '.otf') ];
+	    my $sub_font = $mfont->{tempfile}[1];
+	    if (!$subset_mp) {
+		my @cids = keys %{$mfont->{' cid2uni'}};
+		my @gids = map { $fnt->{' CID2GID'}->[$_] } @cids; # xxxxx
+		subset_start($sub_font, $fnt->{fontfile}, @gids) if @gids;
+	    } else {
+		my $pid = fork;
+		if (!defined $pid) {
+		    die "can't fork for $fnt->{fontfile}";
+		} elsif ($pid == 0) {
+		    my @cids = keys %{$mfont->{' cid2uni'}};
+		    my @gids = map { $fnt->{' CID2GID'}->[$_] } @cids; # xxxxx
+		    subset_start($sub_font, $fnt->{fontfile}, @gids) if @gids;
+		    exit 0;
+		} else {
+		    $mfont->{pid} = $pid;
+		    $mfont->{t0} = [ gettimeofday() ]
+			if $show_subset_etime;
+		}
+	    }
+	    push @mfont_embedding, $mfont;
+	}
     }
 }
 
 
-foreach my $fontno (sort keys %fontlst) {
-    my $f = $fontlst{$fontno};
+for my $mfont (@mfont_embedding) {
+    my $f = $mfont->{f};
     my $fnt = $f->{FNT};
-    if ($fnt->{cidfont}) {
-	my $DOWNLOAD = $DOWNLOAD{$fnt->{' FontName'}};
-	if ($fnt->{embed} || $embedall) {
-	    unless ($DOWNLOAD->{fontfile}) {
-		if ($subset_mp) {
-		    if (my $pid = $DOWNLOAD->{' pid'}) {
-			$DOWNLOAD->{' pid'} = undef;
-			print STDERR "# waitpid($pid, 0)\n" if 0 && $debug;
-			waitpid($pid, 0);
-		    }
-		}
-		my $sub_font = $DOWNLOAD->{' tempfile'}[1];
-		$DOWNLOAD->{fontfile} = subset_end($sub_font);
-		unlink $sub_font;
-		delete $DOWNLOAD->{' tempfile'};
+
+    if ($mfont->{subsetting} == 1) {
+	$mfont->{subsetting} = 2;
+	if ($subset_mp) {
+	    if (my $pid = $mfont->{pid}) {
+		$mfont->{pid} = undef;
+		waitpid($pid, 0);
+		print STDERR "pyftsubset: ", "etime: ",
+		    tv_interval($mfont->{t0}),
+		      ", ", $fnt->{name},
+		      "\n"
+		      if $show_subset_etime;
 	    }
-	    my $p = GetObj($fnt->{font_descriptor});
-	    for ($DOWNLOAD->{fontfile}) {
-		$p->{FontFile3} = $_ if defined;
-	    }
-	    $p->{'FontName'} = "/".$DOWNLOAD->{' FontName'};
 	}
+	my $sub_font = $mfont->{tempfile}[1];
+	$mfont->{FONTFILE} = subset_end($sub_font);
+	unlink $sub_font;
+	delete $mfont->{tempfile};
+
+	my $fontname = "/".SubTag().$fnt->{internalname};
+	if (my $p = GetObj($mfont->{font_descriptor})) {
+	    $p->{FontFile3} = $mfont->{FONTFILE} if !($options & NOFILE);
+	    $p->{FontName} = $fontname;
+	}
+	if (my $p = GetObj($mfont->{font_resource})) {
+	    $p->{BaseFont} = $fontname;
+	}
+	if (my $p = GetObj($mfont->{cid_font})) {
+	    $p->{BaseFont} = $fontname;
+	}
+
     }
 
 }
 
 
 sub subset_start {
-    my ($fn, $fnt, $sub_font) = @_;
-
-    my @cids = keys %{$fnt->{' cid2uni'}};
-    return undef if !@cids || @cids == 1 && $cids[0] == 0;;
-    my @gids = map { $fnt->{' CID2GID'}->[$_] } @cids; # xxxxx
+    my ($sub_font, $fontfile, @gids) = @_;
 
     my ($gh, $gid_file) = tempfile(DIR => '/tmp', SUFFIX => '.txt');
     #my $gids = join ',', @gids;
     print $gh join(',', @gids), "\n";
     close $gh;
     my @pyftsubset = (
-        'pyftsubset.pyenv', $fnt->{fontfile}, # $PATH_otf,
+        'pyftsubset.pyenv', $fontfile, # $PATH_otf,
         "--output-file=$sub_font",
         #"--gids=$gids",
         "--gids-file=$gid_file",
@@ -1115,6 +1354,17 @@ $objct=$tobjct;
 #my $encrypt=BuildObj(++$objct,{'Filter' => '/Standard', 'V' => 1, 'R' => 2, 'P' => 252});
 #PutObj($objct);
 
+# Prints the relationship with groff_font.
+if (0 && $debug) {
+    print "% hints\n";
+    foreach my $fontno (sort keys %fontlst) {
+	my $f=$fontlst{$fontno};
+	my $fnt=$f->{FNT};
+	print "% ", join("\t", ("F$fontno", $f->{OBJ}, $fnt->{name},
+				$fnt->{internalname})), "\n";
+    }
+}
+
 my $xrefct=$fct;
 
 $objct+=1;
@@ -1172,170 +1422,14 @@ else
 print "startxref\n$xrefct\n\%\%EOF\n";
 print "\% Pages=$pages->{Count}\n" if $stats;
 
-
-sub PutCIDFont
-{
-    my $fontno = shift;
-    my $fontnm = $fontno;
-
-    my $f = $fontlst{$fontno};
-
-    my $fnt = $f->{FNT};
-    my $otf = $fnt->{' OTF'};
-
-    0 and print STDERR 'keys %{$f->{FNT}}: ', "@{[ sort keys %{$f->{FNT}} ]}", "\n";
-
-=begin comment
-
-ALLOC CHARSET DIFF NAM NO TRFCHAR WIDTH ascent capheight cidfont encoding
-fntbbox fontfile internalname lastchr ligatures name nospace opentype slant
-spacewidth t1flags
-
-=end comment
-
-=cut
-
-    0 and print STDERR "ref \$f->{FNT}{$_}: ", ref $f->{FNT}{$_}, "\n"
-        for sort keys %{$f->{FNT}};
-
-
-=begin comment
-
-ref $f->{FNT}{ALLOC}: 
-ref $f->{FNT}{CHARSET}: ARRAY
-ref $f->{FNT}{DIFF}: ARRAY
-ref $f->{FNT}{NAM}: HASH
-
-The keys are the names (names of the characters) and the values ​​are the
-charsets of the groff_fonts.
-
-ref $f->{FNT}{NO}: ARRAY
-
-The index is code (character number), the value is name (character name).
-
-ref $f->{FNT}{TRFCHAR}: ARRAY
-ref $f->{FNT}{WIDTH}: ARRAY
-ref $f->{FNT}{ascent}: 
-ref $f->{FNT}{capheight}: 
-ref $f->{FNT}{cidfont}: 
-ref $f->{FNT}{encoding}: 
-ref $f->{FNT}{fntbbox}: ARRAY
-ref $f->{FNT}{fontfile}: 
-ref $f->{FNT}{internalname}: 
-ref $f->{FNT}{lastchr}: 
-ref $f->{FNT}{ligatures}: 
-ref $f->{FNT}{name}: 
-ref $f->{FNT}{nospace}: 
-ref $f->{FNT}{opentype}: 
-ref $f->{FNT}{slant}: 
-ref $f->{FNT}{spacewidth}: 
-ref $f->{FNT}{t1flags}: 
-
-=end comment
-
-=cut
-
-    0 and print STDERR "ref \$f->{FNT}{WIDTH}: ", Dumper($f->{FNT}{WIDTH});
-
-    if ($fnt->{usespace}) {
-        my $space = 'u0020';
-        my ($chf, $ch) = GetNAM($fnt, $space);
-        AssignGlyph($fnt, $chf, $ch);
-    }
-
-    # Type 0 Font Dictionaries (Table 121)
-    my $font_resource = BuildObj(++$objct, {
-        Type => "/Font",
-        Subtype => "/Type0",
-        BaseFont => "/" . join('-', $fnt->{' FontName'}, $fnt->{' CMapName'}),
-        Encoding => "/".$fnt->{' Encoding'},
-        # DescendantFonts => [ $cid_font ], # [ 7 0 R ],
-        # ToUnicode => undef, # 8 0 R,
-    });
-    $fontlst{$fontnm}->{OBJ} = $font_resource;
-
-    #push(@fontdesc, EmbedFont($fontnm,$fnt));
-    $pages->{Resources}->{Font}->{'F'.$fontnm} = $fontlst{$fontnm}->{OBJ};
-    # $obj[$objct-2]->{DATA}->{'ToUnicode'} = $textenccmap if exists($fnt->{ToUnicode});
-
-
-    # CIDFonts (Table 117)
-    my $cid_font = BuildObj(++$objct, {
-        Type => "/Font",
-        Subtype => "/CIDFontType0", # if OpenType
-        BaseFont => "/".$fnt->{' FontName'}, # CIDFontName
-        CIDSystemInfo => $fnt->{' CIDSystemInfo'},
-        # FontDescriptor => undef, # 8 0 R
-    });
-    GetObj($font_resource)->{DescendantFonts} = [ $cid_font ];
-
-    my $flags = 0;
-    #$flags += 1 << ( 1 - 1); # FixedPitch
-    $flags += 1 << ( 1 - 1) if $fnt->{' isFixedPitch'};
-    #$flags += 1 << ( 2 - 1); # Serif
-    $flags += 1 << ( 2 - 1) if $fnt->{' FontName'} =~ /Serif/i;
-    #$flags += 1 << ( 3 - 1); # Symbolic
-    $flags += 1 << ( 3 - 1) if $fnt->{special};
-    #$flags += 1 << ( 4 - 1); # Script
-    #$flags += 1 << ( 6 - 1); # Nonsymbolic
-    $flags += 1 << ( 6 - 1) if !$fnt->{special};
-    #$flags += 1 << ( 7 - 1); # Italic
-    $flags += 1 << ( 7 - 1) if $fnt->{slant};
-    #$flags += 1 << (17 - 1); # AllCap
-    #$flags += 1 << (18 - 1); # SmallCap
-    #$flags += 1 << (19 - 1); # ForceBold
-
-    # Entries common to all font descriptors (Table 122)
-    my $font_descriptor = BuildObj(++$objct, {
-        Type        => "/FontDescriptor",
-        Flags       => $flags,
-        FontName    => "/".$fnt->{' FontName'},
-        FontBBox    => $fnt->{' FontBBox'},
-        ItalicAngle => $fnt->{slant},
-        Ascent      => $fnt->{' Ascender'},
-        Descent     => $fnt->{' Descender'},
-        CapHeight   => $fnt->{' CapHeight'},
-        StemV       => 0,
-        #FontFile3"  => "", # 9 0 R
-    });
-    GetObj($cid_font)->{FontDescriptor} = $font_descriptor;
-
-    my $p = GetObj($cid_font);
-    if ($fnt->{vertical}) {
-        $p->{DW2} = $fnt->{' DW2'};
-        $p->{W2} = w2_array($fnt);
-    } else {
-        $p->{DW} = $fnt->{' DW'};
-        $p->{W} = w_array($fnt);
-    }
-
-    $fnt->{font_descriptor} = $font_descriptor;
-    $fnt->{font_resource} = $font_resource;
-
-    my $DOWNLOAD = $DOWNLOAD{$fnt->{' FontName'}} //= {};
-    $DOWNLOAD->{' cid2uni'} = {
-        %{$DOWNLOAD->{' cid2uni'} // {}},
-        %{$fnt->{' cid2uni'} // {}},
-    };
-
-    0 and print STDERR Dumper({
-        #'$font_resource' => GetObj($font_resource),
-        #'$cid_font' => GetObj($cid_font),
-        #'$font_descriptor' => GetObj($font_descriptor),
-        #'$pages' => GetObj($pages), # xxxxx
-    });
-
-}
-
-
 sub w_array {
-    my ($fnt) = @_;
+    my ($fnt, $cid2nam) = @_;
 
     my @w;
     my $n = 0;
     my $lastc = -1;
-    for my $c (sort { $a <=> $b } keys %{$fnt->{' cid2nam'}}) {
-        my ($chf, $ch) = GetNAM($fnt, $fnt->{' cid2nam'}{$c});
+    for my $c (sort { $a <=> $b } keys %$cid2nam) {
+        my ($chf, $ch) = GetNAM($fnt, $cid2nam->{$c});
         my $w = $chf->[WIDTH] // $fnt->{' DW'};
         if ($w == $fnt->{' DW'}) {
             $n++;
@@ -1396,12 +1490,12 @@ sub w_array {
 
 
 sub w2_array {
-    my ($fnt) = @_;
+    my ($fnt, $cid2nam) = @_;
 
     my @w2;
     my $lastc = -1;
-    for my $c (sort { $a <=> $b } keys %{$fnt->{' cid2nam'}}) {
-        my ($chf, $ch) = GetNAM($fnt, $fnt->{' cid2nam'}{$c});
+    for my $c (sort { $a <=> $b } keys %$cid2nam) {
+        my ($chf, $ch) = GetNAM($fnt, $cid2nam->{$c});
         my $w = $chf->[WIDTH] // $fnt->{' DW'};
 
 	# PDF 32000-1:2008 PP.271-272
@@ -1458,32 +1552,33 @@ sub w2_array {
 }
 
 
-sub unicode_cmap {
-    my ($cmapname, $tounicode) = @_;
-    return undef unless $tounicode && %$tounicode;
-
-    my $cmaptype = 2;
-    my $CIDSystemInfo = {
-        "Registry" => "(Adobe)",
-        "Ordering" => "(UCS)",
-        "Supplement" => 0,
-    };
+sub make_cmap {
+    my ($cmaptype, $cmapname, $cidsysteminfo, $tounicode) = @_;
     my $ucmap = BuildObj(++$objct, {
         "Type" => "/CMap",
-        "CMapName" => "/$cmapname",
-        "CIDSystemInfo" => $CIDSystemInfo,
+        "CMapName" => $cmapname,
+        "CIDSystemInfo" => $cidsysteminfo,
     });
-    PutField(\ my ($CIDSystemInfo_text), $CIDSystemInfo);
+    PutField(\ my ($CIDSystemInfo_text), $cidsysteminfo);
     chop($CIDSystemInfo_text);
-    $obj[$objct]->{STREAM} = join "\n", grep !/^[%]/, split /\n/, <<endstream;
+    my $body = "% body is empty";
+    if ($tounicode && %{$tounicode}) {
+	$body = <<END;
+@{[ codespacerange([ map pack("U*", $_), keys %{$tounicode} ]) ]}
+@{[ bfrange($tounicode) ]}
+END
+	chop($body);
+    }
+    $obj[$objct]->{STREAM} = join "\n",
+	#grep !/^[%]/,
+	split /\n/, <<endstream;
 /CIDInit /ProcSet findresource begin
 12 dict begin
 begincmap
-/CMapName /$cmapname def
+/CMapName $cmapname def
 /CMapType $cmaptype def
 /CIDSystemInfo $CIDSystemInfo_text def
-@{[ codespacerange([ map pack("U*", $_), keys %{$tounicode} ]) ]}
-@{[ bfrange($tounicode) ]}
+$body
 endcmap
 CMapName currentdict /CMap defineresource pop
 end
@@ -1506,8 +1601,14 @@ sub bfrange {
         my $i = 0;
         while ($i + 1 <= $#k) {
             last if $k[$i] + 1 != $k[$i + 1];
-            my $a = [ map ord($_), split //, $bfchar->{$k[$i]} ];
-            my $b = [ map ord($_), split //, $bfchar->{$k[$i + 1]} ];
+            my ($a, $b);
+            if ($prefer_utf16) {
+                $a = [ map hex($_), split '_', $bfchar->{$k[$i]} ];
+                $b = [ map hex($_), split '_', $bfchar->{$k[$i + 1]} ];
+            } else {
+                $a = [ map ord($_), split //, $bfchar->{$k[$i]} ];
+                $b = [ map ord($_), split //, $bfchar->{$k[$i + 1]} ];
+            }
             my $j = $#{$a};
             last if $#{$a} != $#{$b};
             last if $a->[$j] + 1 != $b->[$j];
@@ -1528,13 +1629,25 @@ sub bfrange {
 
     join "\n", (
         blocking('bfrange', map {
-            my @hex = map sprintf('%04X', $_), unpack 'n*',
-                encode 'UTF16-BE', $bfchar->{$_->[0]};
-            join ' ', sprintf("<%04X>", $_->[0]), sprintf("<%04X>", $_->[1]), "<@hex>";
+            my @hex;
+	    if ($prefer_utf16) {
+		@hex = split '_', $bfchar->{$_->[0]};
+	    } else {
+		@hex = map sprintf('%04X', $_), unpack 'n*',
+		    encode 'UTF16-BE', $bfchar->{$_->[0]};
+	    }
+            join ' ',
+		sprintf("<%04X>", $_->[0]),
+		sprintf("<%04X>", $_->[1]), "<@hex>";
         } @bfrange),
         blocking('bfchar', map {
-            my @hex = map sprintf("%04X", $_), unpack "n*",
-                encode "UTF16-BE", $bfchar->{$_};
+            my @hex;
+	    if ($prefer_utf16) {
+		@hex = split '_', $bfchar->{$_};
+	    } else {
+		@hex = map sprintf("%04X", $_), unpack "n*",
+		    encode "UTF16-BE", $bfchar->{$_};
+	    }
             join ' ', sprintf("<%04X>", $_), "<@hex>";
         } @bfchar),
     );
@@ -1620,6 +1733,31 @@ sub blocking {
         push @out, "end${name}";
     }
     join "\n", @out;
+}
+
+
+sub parse_cmap {
+    my ($tounicode, $cmap) = @_;
+    $cmap =~ s/^\s*%.*//gm;
+    my $hex = qr/[\da-f]+/i;
+    while ($cmap =~ s/\d+\s+beginbf(range|char)\s*(.*?)\s*endbf\1\s*//s) {
+        my ($t, $bf) = ($1, $2);
+        while ($bf =~ s/^\s*<\s*($hex)\s*>\s*//s) {
+            my ($start, $end) = (hex $1, undef);
+            $end = hex $1 if $t eq 'range' && $bf =~ s/^\s*<\s*($hex)\s*>\s*//s;
+            $end //= $start;
+            my $value = '';
+            $value = $1 || $2 if $bf =~ s/^(?:\[\s*([^\]]+)\]|(\<[^\>]+\>|\S+))\s*//s;
+            #$value =~ s/<((?:$hex|\s)+)>/my $h = $1; $h =~ s{\s}{}g; "<$h>"/eg;
+            $value =~ s/<((?:$hex|\s)+)>/my $h = $1; $h =~ s{\s}{}g; $h/eg;
+            my @value = split /\s+/, $value;
+            for ($start .. $end) {
+                last unless @value;
+                #$tounicode->[$_] = shift @value;
+                $tounicode->{$_} = shift @value;
+            }
+        }
+    }
 }
 
 
@@ -1750,6 +1888,10 @@ sub LinkOutObj
 sub GetObj
 {
     my $ono=shift;
+    unless (defined $ono) {
+	my ($package, $filename, $line) = caller;
+	die "fatal program error (\$ono is undef); GetObj called near line $line";
+    }
     ($ono)=split(' ',$ono);
     return($obj[$ono]->{DATA});
 }
@@ -3832,7 +3974,6 @@ sub LoadFont
     $foundry=$1 if $fontnm=~m/^(.*?)-/;
     my $stg=1;
     my %fnt;
-    my %ngpos;
 
     if ($stg == 1) {
 	while (<$f>) {
@@ -3879,61 +4020,70 @@ sub LoadFont
 	    next if $_ eq '';
 
             my (@r)=split;
-            my (@p)=split(',',$r[1]);
-
 	    if ($r[1] eq '"')
 	    {
-		#$fnt{NAM}->{$r[0]}=$fnt{NAM}->{$lastnm};
-		$fnt{NAM}->{$r[0]}=$fnt{NAM}->{$fnt{NO}->[-1]};
+		my $lastnm = $fnt{NO}->[-1];
+		my $chf = $fnt{NAM}->{$lastnm};
+		$fnt{NAM}->{$r[0]} = $chf;
 		next;
 	    }
 
-            $r[3]=oct($r[3]) if substr($r[3],0,1) eq '0';
-            $r[0]='u0020' if $r[3] == 32;
-
-	    # When $r[0] (name of char) is ---, the reason for setting
-	    # $r[0] to "u00".hex($r[3]) is to register the glyph using
-	    # $r[0] as the key.  However, $r[3] (code of char) does not
-	    # store the hexadecimal string, so for example, when $r[3]
-	    # is 14, $t[0] becomes u0020 (space). -- obuk
+            $r[3] = oct($r[3]) if substr($r[3],0,1) eq '0';
+            $r[0] = 'u0020' if $r[3] == 32;
 
             #$r[0] = "u00".hex($r[3]) if $r[0] eq '---';
-            $r[0] = "N'$r[3]'" if $r[0] eq '---';
+	    if ($r[0] eq '---') {
+		if ($r[3] < 256) {
+		    $r[0] = sprintf "u%04X", $r[3];
+		} else {
+		    next;
+		}
+	    }
 
-            $r[4]=$r[0] if !defined($r[4]);
-
-	    my %opts;
+	    my %opt;
 	    if ($r[5] && $r[5] eq '--') {
 		for (splice(@r, 6)) {
 		    my ($k, $v) = split '=';
-		    $opts{$k} = $v;
+		    $opt{$k} = $v;
 		}
 		$r[5] = undef;
 	    }
-	    unless ($r[5]) {
-		if ($opts{unicode}) {
-		    $r[5] = $opts{unicode};
-		    delete $opts{unicode};
-		} elsif ($r[0] =~ /^u([\dA-F_]+)$/) {
-		    $r[5] = join '_', map { sprintf "%04X", $_ }
-			unpack "n*", encode "UTF16-BE",
-			pack "U*", map hex($_), split '_', $1;
-		}
-	    }
+	    $r[5] //= $opt{unicode};
 
+	    # If the Unicode is not specified in the options, the
+	    # Unicode can be obtained from the glyph name here.
+	    # However, the Unicode is processed with GetNAM() to ensure
+	    # that it is only obtained for glyphs that are actually
+	    # used.
+
+            my (@p)=split(',',$r[1]);
+            my $entity_name;
             if ($fnt{cidfont}) {
                 my $cid = $r[4];
-                my $gid = $opts{gid} // $cid;
-                $ngpos{$gid} = \%opts;
-                delete $opts{gid};
+		if (%opt) {
+		    my $gid = $opt{gid} // $cid;
+		    for (qw/XPlacement YPlacement/) {
+			if (defined (my $v = $opt{$_})) {
+			    $fnt{' GPOS'}{$gid}{$_} = $opt{$_};
+			}
+		    }
+		}
+		$entity_name = $cid;
+	    } else {
+		$entity_name = "/" . ($r[4] // $r[0]);
+	    }
 
-                # The PSNAME also stores the cid, which does not have a
-                # leading '/' for visual distinction. -- obuk
-                $fnt{NAM}->{$r[0]}=[$p[0],$r[3],$cid,     undef,undef,$r[5],$p[1]||0,$p[2]||0];
-            } else {
-                $fnt{NAM}->{$r[0]}=[$p[0],$r[3],'/'.$r[4],undef,undef,$r[5],$p[1]||0,$p[2]||0];
-            }
-
+	    $fnt{NAM}->{$r[0]} = [
+		$p[0],		# WIDTH
+		$r[3],		# CHRCODE
+		$entity_name,	# PSNAME
+		undef,		# MINOR
+		undef,		# MAJOR
+		$r[5],		# UNICODE
+		$p[1]||0,	# RST
+		$p[2]||0,	# RSB
+		$opt{gsub},	# OPTGSUB
+	    ];
             $fnt{NO}->[$r[3]]=$r[0];
 	}
     }
@@ -3975,28 +4125,40 @@ sub LoadFont
     Warn("\nFont '$fnt{internalname} ($ofontnm)' has $lastchr glyphs\n"
         ."You would see a noticeable speedup if you install the perl module Inline::C\n") if !$gotinline and $lastchr > 1000;
 
+    # table 119
+    $fnt{' CIDSystemInfo'} = {
+	Registry => "(Adobe)",
+	Ordering => "(UCS)",
+	Supplement => 0,
+    };
+
+    if ($fnt{opentype}) {
+	unless (ref $fnt{opentype}) {
+	    my %feature;
+	    for (split /\s+/, $fnt{opentype}) {
+		my ($f, $x) = split /=/;
+		$feature{$f} = $x;
+	    }
+	    $fnt{opentype} = \%feature;
+	}
+    }
+
     if (exists($download{$fontkey}))
     {
         # Real font needs subsetting
 	#$fnt{fontfile}=$download{$fontkey};
 	$fnt{fontfile} = $download{$fontkey}{fontfile};
 	$fnt{embed} = $download{$fontkey}{embed};
-        if ($fnt{opentype} || $fnt{cidfont}) {
+        if ($fnt{opentype}) {
             my $otf = Font::TTF::Font->open($fnt{fontfile});
             $fnt{' OTF'} = $otf;
-
-            $fnt{' GPOS'} = \%ngpos if %ngpos;
-            $fnt{' GSUB'} = 'not used';
-            if ($fnt{opentype}) {
-                for (split /\s+/, $fnt{opentype}) {
-                    my ($f, $x) = split /=/;
-                    next if defined $fnt{" \U$f\E"};
-                    next if !defined $x;
-                    die "cant $f; $@" unless __PACKAGE__->can($f);
-                    no strict 'refs';
-                    $otf->{uc $f}->read;
-                    $fnt{" \U$f\E"} = &$f($otf, split /,/, $x);
-                }
+	    while (my ($f, $x) = each %{$fnt{opentype}}) {
+		next if defined $fnt{" \U$f\E"};
+		next if !defined $x;
+		die "cant $f; $@" unless __PACKAGE__->can($f);
+		no strict 'refs';
+		$otf->{uc $f}->read;
+		$fnt{" \U$f\E"} = &$f($otf, split /,/, $x);
             }
 
             $otf->{'CFF '}->read;
@@ -4008,18 +4170,22 @@ sub LoadFont
             }
             $fnt{' CID2GID'} = $cid2gid;
             #$fnt{' GID2CID'} = $gid2cid;
+	    if (my $cidfont = $fnt{cidfont}) {
+		#my $ROS = $otf->{'CFF '}->TopDICT->{ROS};
+		my $ROS = [ split '-', $cidfont ];
+		$fnt{' CIDSystemInfo'} = {
+		    Registry => "($ROS->[0])",
+		    Ordering => "($ROS->[1])",
+		    Supplement => $ROS->[2],
+		};
+	    }
 
-            $fnt{' CIDSystemInfo'} = {
-                Registry => "(Adobe)",
-                Ordering => "(Identity)",
-                Supplement => 0,
-            };
-
-            $fnt{' Encoding'} = $fnt{vertical}? "Identity-V" : "Identity-H";
-            $fnt{' CMapName'} = join '-', $fnt{name}, $fnt{' Encoding'};
+            $fnt{' Encoding'} = join '-', "Identity", $fnt{vertical}? "V" : "H";
+	    $fnt{' CMapName'} = join '-', 'Adobe', 'Identity', 'UCS';
+	    #$fnt{' CMapName'} = join '-', $fnt{name}, 'Identity', 'UCS';
 
             $otf->{name}->read;
-            $fnt{' FontName'}   = get_name($otf, 6);
+            #$fnt{' FontName'}   = get_name($otf, 6); # same as internalname
             $fnt{' FamilyName'} = get_name($otf, 1);
             $fnt{' Notice'}     = get_name($otf, 0);
             $fnt{' Weight'}     = get_name($otf, 2);
@@ -4057,8 +4223,14 @@ sub LoadFont
             $fnt{' DW2'} = [ 1000 + $fnt{' Descender'}, -1000 ];
         } else {
 
+	    $fnt{' Encoding'} = $fnt{encoding} // 'CustomEnc';
+	    $fnt{' CMapName'} = join '-', 'Adobe', 'Identity', 'UCS';
+	    #$fnt{' CMapName'} = join '-', $fnt{name}, 'Identity', 'UCS';
+
 	    my $fixwid = -1;
-	    while (my ($k, $v) = each %{$fnt{NAM}}) {
+	    for my $code (0 .. 255) {
+		next unless defined (my $name = $fnt{NO}[$code]);
+		next unless defined (my $v = $fnt{NAM}{$name});
 		if (ref $v && defined $v->[WIDTH]) {
 		    $fixwid = $v->[WIDTH] if $fixwid == -1;
 		    $fixwid = -2, last if $fixwid > 0 and $v->[WIDTH] != $fixwid;
@@ -4066,8 +4238,8 @@ sub LoadFont
 	    }
 
 	    my $capheight = -1;
-	    for ('A' .. 'Z') {
-		my $v = $fnt{NAM}{$_};
+	    for my $name ('A' .. 'Z') {
+		next unless defined (my $v = $fnt{NAM}{$name});
 		if (ref $v && defined $v->[RST]) {
 		    $capheight = $v->[RST] if $v->[RST] > $capheight;
 		}
@@ -4075,20 +4247,22 @@ sub LoadFont
 
 	    my $ascent = 0;
 	    for my $code (32 .. 127) {
-		if (my $name = $fnt{NO}[$code]) {
-		    if (my $v = $fnt{NAM}{$name}) {
-			if (ref $v && defined $v->[RST]) {
-			    $ascent = $v->[RST] if $v->[RST] > $ascent;
-			}
-		    }
+		next unless defined (my $name = $fnt{NO}[$code]);
+		next unless defined (my $v = $fnt{NAM}{$name});
+		if (ref $v && defined $v->[RST]) {
+		    $ascent = $v->[RST] if $v->[RST] > $ascent;
 		}
 	    }
 
 	    my @fntbbox = (0,0,0,0);
-	    while (my ($k, $v) = each %{$fnt{NAM}}) {
-		$fntbbox[1] = -$v->[RSB]  if defined($v->[RSB]) and -$v->[RSB] < $fntbbox[1];
-		$fntbbox[2] = $v->[WIDTH] if defined($v->[WIDTH]) and $v->[WIDTH] > $fntbbox[2];
-		$fntbbox[3] = $v->[RST]   if defined($v->[RST]) and $v->[RST] > $fntbbox[3];
+	    for my $code (0 .. 255) {
+		next unless defined (my $name = $fnt{NO}[$code]);
+		next unless defined (my $v = $fnt{NAM}{$name});
+		if (ref $v && defined $v->[WIDTH]) {
+		    $fntbbox[1] = -$v->[RSB]  if defined($v->[RSB]) and -$v->[RSB] < $fntbbox[1];
+		    $fntbbox[2] = $v->[WIDTH] if defined($v->[WIDTH]) and $v->[WIDTH] > $fntbbox[2];
+		    $fntbbox[3] = $v->[RST]   if defined($v->[RST]) and $v->[RST] > $fntbbox[3];
+		}
 	    }
 
 	    $fnt{fntbbox} =   \@fntbbox;
@@ -4945,7 +5119,31 @@ sub PutLine
         if (defined($chr))
         {
             my $psname = $c->[CHF]->[PSNAME];
-            if (substr($psname, 0, 1) eq '/') {
+            if ($thisfnt->{cidfont}) {
+		my $gid = $thisfnt->{' CID2GID'}->[$psname];
+		if (my $gpos = $thisfnt->{' GPOS'}) {
+		    if ($thisfnt->{vertical}) {
+			if (my $v = $gpos->{$gid}) {
+			    for ($v->{YPlacement}) {
+				$placement += $_ if defined;
+			    }
+			}
+		    } else {
+			if (my $v = $gpos->{$gid}) {
+			    for ($v->{XPlacement}) {
+				$placement += $_ if defined;
+			    }
+			}
+		    }
+		}
+		if ($thisfnt->{' Encoding'} =~ /^Identity-/) {
+		    $char = sprintf "<%04X>", $psname;
+		} else {
+		    my @hex = split '_', $c->[CHF]->[UNICODE];
+		    $char = "<@hex>";
+		}
+                $chrc.=$char;
+	    } else {
                 $chr=abs($chr);
                 $char=chr($chr);
                 $char="\\\\" if $char eq "\\";
@@ -4953,23 +5151,6 @@ sub PutLine
                 $char="\\)" if $char eq ")";
                 $char = "($char)";
                 $chrc.="(".chr(abs($chr)).")" if $cftmajor==0 and $chr < 128;
-            } else {
-                my $gid = $thisfnt->{' CID2GID'}->[$psname];
-                if (my $gpos = $thisfnt->{' GPOS'}) {
-                    if (my $v = $gpos->{$gid}) {
-                        if ($thisfnt->{vertical}) {
-                            for ($v->{'YPlacement'}) {
-                                $placement = $_ if defined;
-                            }
-                        } else {
-                            for ($v->{'XPlacement'}) {
-                                $placement = $_ if defined;
-                            }
-                        }
-                    }
-                }
-                $char = sprintf "<%04X>", $psname;
-                $chrc.=$char;
             }
             $chrc .= "[$psname]";
         }
@@ -5148,9 +5329,39 @@ sub do_v
 
 sub GetNAM
 {
-    my ($f,$c)=(@_);
+    my ($f,$c) = (@_);
 
     my $r=$f->{NAM}->{$c};
+
+    unless ($r->[UNICODE]) {
+
+	# replace the decomposed characters with the equivalent
+	# precomposed characters.
+
+	if (length $c == 1) {
+	    $r->[UNICODE] = sprintf "%04X", ord($c);
+	} elsif (my ($hex) = $c =~ /^u([\dA-F_]{4,})$/) {
+	    my $u8 = pack "U*", map hex($_), split '_', $hex;
+	    if ($u8 !~ /\p{InCJK_Compatibility_Ideographs}/) {
+		if (__PACKAGE__->can('NFC')) {
+		    $u8 = NFC($u8);
+		}
+	    }
+	    my $u16 = join '_', map { sprintf "%04X", $_ }
+		unpack "n*", encode "UTF16-BE", $u8;
+	    $r->[UNICODE] = $u16;
+	}
+	if ($debug) {
+	    my $unicode = $r->[UNICODE];
+	    $unicode //= 'undef';
+	    my $entity_name = $r->[PSNAME];
+	    if ($entity_name && $f->{cidfont}) {
+		$entity_name = sprintf "#%d", $entity_name;
+	    }
+	    $entity_name //= 'undef';
+	    $stream.="%!!! GetNAM: $f->{name}, $c, U+$unicode, $entity_name\n";
+	}
+    }
     return($r,$c) if ref($r) eq 'ARRAY';
     return($f->{NAM}->{$r},$r);
 }
@@ -5183,15 +5394,29 @@ sub AssignGlyph
     $stream.="% Assign: $chf->[PSNAME] to $chf->[MAJOR]/$chf->[MINOR]\n" if $debug;
 
     if (my $u16 = $chf->[UNICODE]) {
-	my $u = decode "UTF16-BE", pack "n*", map hex($_), split '_', $u16;
-	if ($fnt->{cidfont}) {
-	    my $cid = $chf->[PSNAME];
-	    $fnt->{' cid2nam'}{$cid} = $ch;
-	    $fnt->{' cid2uni'}{$cid} = $u;
+	if ($prefer_utf16) {
+	    if ($fnt->{cidfont}) {
+		my $cid = $chf->[PSNAME];
+		$fnt->{' cid2nam'}{$cid} = $ch;
+		$fnt->{' cid2uni'}{$cid} = $u16;
+		$fnt->{' optgsub'}{$cid} = 1 if $chf->[OPTGSUB];
+	    } else {
+		$fnt->{' 2nam'}[$chf->[MAJOR]]{$chf->[MINOR]} = $ch;
+		$fnt->{' 2uni'}[$chf->[MAJOR]]{$chf->[MINOR]} = $u16;
+	    }
 	} else {
-	    $fnt->{' 2nam'}[$chf->[MAJOR]]{$chf->[MINOR]} = $ch;
-	    $fnt->{' 2uni'}[$chf->[MAJOR]]{$chf->[MINOR]} = $u;
+	    my $u = decode "UTF16-BE", pack "n*", map hex($_), split '_', $u16;
+	    if ($fnt->{cidfont}) {
+		my $cid = $chf->[PSNAME];
+		$fnt->{' cid2nam'}{$cid} = $ch;
+		$fnt->{' cid2uni'}{$cid} = $u;
+		$fnt->{' optgsub'}{$cid} = 1 if $chf->[OPTGSUB];
+	    } else {
+		$fnt->{' 2nam'}[$chf->[MAJOR]]{$chf->[MINOR]} = $ch;
+		$fnt->{' 2uni'}[$chf->[MAJOR]]{$chf->[MINOR]} = $u;
+	    }
 	}
+
     }
 }
 
@@ -6030,6 +6255,26 @@ sub gpos {
     }
 
     $gpos;
+}
+
+
+sub InCJK_Compatibility_Ideographs {
+    join '', map { sprintf "%04X\t%04X\n", $_->[0], $_->[1] }
+	grep_charblocks(qr/CJK Compatibility Ideographs/);
+}
+
+
+sub grep_charblocks {
+  grep { $_->[2] =~ /$_[0]/ }
+    sort { $a->[0] <=> $b->[0] }
+    map { @$_ }
+    values %{ charblocks() },
+    [
+      [
+        0x3099, 0x309A,
+        "Combining Katakana-Hiragana Voiced Sound Marks"
+      ],
+    ];
 }
 
 1;
