@@ -1,12 +1,15 @@
 HOME?=		$(shell getent passwd ${USER} |cut -d: -f6)
 PYTHON_VERSION?=	3.10.12
 
-%.pip:	pyenv
+%.pip:	pyenv pip
 	@if [ ! -f $@ ]; then \
 	  echo pip install $*; \
 	  bash -lc 'pip install $*'; \
 	  touch $@; \
 	fi
+
+pip:	pyenv
+	#bash -lc 'pip install --upgrade pip'
 
 pyenv:	pyenv.global
 
