@@ -3,7 +3,7 @@
 .\" ps.local
 .\"
 .
-.nr my:debug-font 0
+.if !r my:debug-font .nr my:debug-font 0
 .
 .\"tm configure fonts T, H, C with M, G using fspecial and fzoom.
 .\".ds fnT-default "M\""
