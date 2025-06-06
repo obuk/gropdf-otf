@@ -6,6 +6,7 @@ include Mk/*.mk
 HaranoAjiFonts.git?=	https://github.com/trueroad/HaranoAjiFonts
 HaranoAjiFonts.dir?=	HaranoAjiFonts
 
+EMBED=	*
 FAM?=	M G
 M?=	HaranoAjiMincho
 G?=	HaranoAjiGothic
