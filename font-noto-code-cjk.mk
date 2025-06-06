@@ -1,5 +1,5 @@
-FAM=	Code
-Code=	NotoSansCJKjp
+FAM?=	Code
+Code?=	NotoSansCJKjp
 
 STY=	R I B BI
 
