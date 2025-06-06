@@ -45,7 +45,7 @@ clean::
 VPATH+=	./files
 
 GROPDF_PL?=	gropdf-otf.pl
-gropdf:	${GROPDF_PL} Inline-C.cpanm Font-TTF.cpanm
+gropdf:	${GROPDF_PL} Inline-C.cpanm Font-TTF.cpanm Unicode-Normalize.cpanm Time-HiRes.cpanm
 	cat $< | perl -w -e '${GROPDF_CFG}' ${GROFF_BIN}/gropdf >$@
 
 clean::
