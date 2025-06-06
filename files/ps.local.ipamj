@@ -1,0 +1,14 @@
+.\" -*- nroff -*-
+.\"
+.\" ps.local.ipamj
+.\"
+.
+.if F IPAmjMR \{\
+.  nr my:dummy \w'\f[IPAmjMR]M\fP'
+.  nr my:IPAmjMR.h (\n[rst] - \n[rsb])
+.  nr my:IPAmjMR.zoom (1000 * \n[my:TR.h] / \n[my:IPAmjMR.h]))
+.  fzoom IPAmjMR \n[my:IPAmjMR.zoom]
+.  fspecial MR IPAmjMR
+.\}
+.
+.\" EOF
