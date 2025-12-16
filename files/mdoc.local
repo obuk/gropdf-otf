@@ -2,46 +2,56 @@
 .\" (mdoc.local)
 .
 .\" Load mdoc/\*[doc-locale]
-.ie "\*[doc-locale]"ja.UTF-8" .mso mdoc/\*[doc-locale]\""
+.ie |\*[doc-locale]|ja.UTF-8| .mso mdoc/\*[doc-locale]\"
 .el .if d locale \{\
-.  if "\*[locale]"japanese" .mso mdoc/ja.UTF-8\""
+.  if |\*[locale]|japanese| .mso mdoc/ja.UTF-8\"
 .\}
 .
 .\" Expand line gap in japanese.
 .\" And output headings as bookmarks.
 .if t \{\
+.  if |\*[locale]|japanese| \
+.    nr PDFBOOKMARK.NOASCIIFY 1
 .am Sh
-.  pdfhref O 1 \\$*\"
-.  if "\\*[locale]"japanese" \{\
+.  if |\\*[locale]|japanese| \{\
 .    vs (\\n[.s]z * 18 / 10)p
 .  \}
 ..
 .am Ss
-.  pdfhref O 2 \\$*\"
-.  if "\\*[locale]"japanese" \{\
+.  if |\\*[locale]|japanese| \{\
 .    vs (\\n[.s]z * 18 / 10)p
 .  \}
 ..
 .am Pp
-.  if "\\*[locale]"japanese" \{\
+.  if |\\*[locale]|japanese| \{\
 .    vs (\\n[.s]z * 18 / 10)p
 .  \}
 ..
 .am Bd
-.  if "\\*[locale]"japanese" \{\
+.  if |\\*[locale]|japanese| \{\
 .    vs (\\n[.s]z * 15 / 10)p
 .  \}
 ..
 .am Bl
-.  if "\\*[locale]"japanese" \{\
+.  if |\\*[locale]|japanese| \{\
 .    vs (\\n[.s]z * 15 / 10)p
+.  \}
+..
+.rn doc-prepare-section-heading doc-prepare-section-heading*old
+.de doc-prepare-section-heading
+.  ie |\*[locale]|japanese| \{\
+.    ds doc-sec-head \\$*\"
+.  \}
+.  el \{
+.    doc-prepare-section-heading*old \\$*
 .  \}
 ..
 .\}
 .
 .\" Specify fonts for various headings.
-.ds Sh-font \f[HB]\s[\n[.ps]u]
-.ds Sy-font \f[HB]\s[\n[.ps]u]
-.ds Sx-font \f[HB]\s[\n[.ps]u]
-.ds Tn-font-shape \f[HR]
+.ds doc-Sh-font \f[HR]
+.ds doc-Sy-font \f[HR]
+.ds doc-Sx-font \f[HR]
+.ds doc-Tn-font \f[HR]
 .
+.\" End

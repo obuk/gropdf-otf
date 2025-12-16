@@ -3,12 +3,21 @@
 .\" ps.local.ipamj
 .\"
 .
-.if F IPAmjMR \{\
-.  nr my:dummy \w'\f[IPAmjMR]M\fP'
-.  nr my:IPAmjMR.h (\n[rst] - \n[rsb])
-.  nr my:IPAmjMR.zoom (1000 * \n[my:TR.h] / \n[my:IPAmjMR.h]))
-.  fzoom IPAmjMR \n[my:IPAmjMR.zoom]
-.  fspecial MR IPAmjMR
-.\}
+.ds my:name IPAmjMR
+.de my:fspecial-\*[my:name]
+.  if \\n[my:debug-font] .tm # \\$0 \\$*
+.  if \\n[fn\*[my:name]] \{ .if F \*[my:name] \{\
+.    nr my:dummy \\w'\f[\*[my:name]]M\fP'
+.    nr \*[my:name].h (\\n[rst] - \\n[rsb])
+.    nr \*[my:name].zoom (1000 * \\n[\\$1.h] / \\n[\*[my:name].h]))
+.    if \\n[my:debug-font]>=2 .tm fzoom \*[my:name] \\n[\*[my:name].zoom]
+.    fzoom \*[my:name] \\n[\*[my:name].zoom]
+.    if \\n[my:debug-font]>=2 .tm fspecial \\$2 \\*[\\$2.s] \*[my:name]
+.    fspecial \\$2 \*[\\$2.s] \*[my:name]
+.    if \\n[my:debug-font]>=2 .tm fspecial \\$1 \\$2 \\*[\\$2.s] \*[my:name]
+.    fspecial \\$1 \\$2 \\*[\\$2.s] \*[my:name]
+.  \}\}
+..
+.my:fspecial-\*[my:name] TR MR
 .
 .\" EOF

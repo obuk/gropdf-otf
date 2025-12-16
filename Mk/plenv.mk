@@ -1,12 +1,8 @@
-plenv:	plenv.global plenv.install-cpanm
+plenv:	plenv.global plenv.install-cpanm plenv.install-pl
 
 %.cpanm: plenv.install-cpanm
-	@if [ ! -f $@ ]; then \
-	  echo cpanm $*; \
-	  m=$(shell echo $* |sed s/-/::/g); \
-	  bash -l -c "cpanm $(or $($*), $$m)"; \
-	  touch $@; \
-	fi
+	@[ -f $@ ] || (m=$(shell echo $* |sed s/-/::/g); bash -l -c "cpanm $(or $($*), $$m)")
+	@[ -f $@ ] || touch $@
 
 plenv.git?=		https://github.com/tokuhirom/plenv
 plenv.dir?=		${HOME}/.plenv
@@ -27,7 +23,7 @@ plenv.profile:	plenv.repo
 	    echo 'export PLENV_ROOT="${plenv.dir}"' | \
 		  sed 's|${HOME}|$$HOME|' >> ${$@}; \
 	  fi; \
-	  for d in bin shim; do \
+	  for d in bin; do \
 	    if ! bash -lc 'printenv PATH' | tr : '\n' | \
 		  grep -qF "${plenv.dir}/$$d"; then \
 	      echo export PATH='"$$PLENV_ROOT/'$$d:'$$PATH"' >> ${$@}; \
@@ -54,3 +50,7 @@ plenv.install-cpanm:	plenv.global
 	@if [ ! -f ${plenv.dir}/shims/cpanm ]; then \
 	  bash -lc 'plenv install-cpanm'; \
 	fi
+
+plenv.install-pl:	files/install-pl.sh
+	mkdir -p ${HOME}/bin
+	install -m755 $< ${HOME}/bin/$(notdir $(basename $<))

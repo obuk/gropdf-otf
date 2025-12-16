@@ -5,201 +5,111 @@
 .
 .if !r my:debug-font .nr my:debug-font 0
 .
-.\"tm configure fonts T, H, C with M, G using fspecial and fzoom.
-.\".ds fnT-default "M\""
-.nr my:dummy \w'\f[TR]M\fP'
-.nr my:TR.h (\n[rst] - \n[rsb])
-.nr my:dummy \w'\f[MR]M\fP'
-.nr my:MR.h (\n[rst] - \n[rsb])
-.nr my:MR.zoom (1000 * \n[my:TR.h] / \n[my:MR.h])
-.ds fnT-default "-szoom \n[my:MR.zoom] M\""
-.\".ds fnH-default "G\""
-.nr my:dummy \w'\f[HR]M\fP'
-.nr my:HR.h (\n[rst] - \n[rsb])
-.nr my:dummy \w'\f[GR]M\fP'
-.nr my:GR.h (\n[rst] - \n[rsb])
-.nr my:HR.zoom (1000 * \n[my:TR.h] / \n[my:HR.h])
-.nr my:GR.zoom (1000 * \n[my:HR.h] / \n[my:GR.h])
-.ds fnH-default "-zoom \n[my:HR.zoom] -szoom \n[my:GR.zoom] G\""
-.nr my:CR.w \w'\f[CR]M\fP'
-.nr my:CR.h (\n[rst] - \n[rsb])
-.nr my:CR.size 800\" XXXXX - Enter the size of the CR for the TR
-.nr my:CR.zoom (\n[my:CR.size] * \n[my:TR.h] / \n[my:CR.h])
-.ds fnC-default "-zoom \n[my:CR.zoom] M\""
-.\".if F CodeR .ds fnC-default "-zoom 800 -ftr Code\""
-.if F CodeR \{\
-.  nr my:dummy \w'\f[CodeR]M\fP'
-.  nr my:CodeR.h (\n[rst] - \n[rsb])
-.  nr my:CodeR.w \w'\f[CodeR]\[uFF0F]\fP'
-.  nr my:CodeR.zoom (1000 * \n[my:CR.h] / \n[my:CodeR.h]))
-.\" get suitable zoom for special font CodeR
-.  nr my:CodeR.z \n[my:CodeR.zoom]
-.  nr my:CodeR.a \n[my:CR.w]
-.  nr my:CodeR.b 0
-.  nr my:CodeR.n 0
-.  while (\n[my:CodeR.n]<10)&(\n[my:CodeR.z]>=\n[my:CodeR.zoom]) \{\
-.    nr my:CodeR.a +\n[my:CR.w]
-.    nr my:CodeR.b +\n[my:CodeR.w]
-.    nr my:CodeR.n +1
-.    nr my:CodeR.lastz \n[my:CodeR.z]
-.    nr my:CodeR.z (1000 * \n[my:CodeR.a] / \n[my:CodeR.b])
-.    \"tm nr CodeR.z \n[my:CodeR.z] (1000 * \n[my:CodeR.a] / \n[my:CodeR.b])
-.  \}
-.  nr my:CodeR.z1 (\n[my:CodeR.lastz] -\n[my:CodeR.zoom])
-.  nr my:CodeR.z2 (-(\n[my:CodeR.z] - \n[my:CodeR.zoom]))
-.  if (\n[my:CodeR.z1]<\n[my:CodeR.z2]) \{\
-.    nr my:CodeR.z \n[my:CodeR.lastz]
-.    nr my:CodeR.n -1
-.  \}
-.  nr my:CodeR.m (\n[my:CodeR.n] + 1)
-.  \"tm m:n = \n[my:CodeR.m]:\n[my:CodeR.n]
-.  ds fnC-default "-zoom \n[my:CR.zoom] -szoom \n[my:CodeR.z] Code\""
-.  rr my:CodeR.z
-.  rr my:CodeR.m
-.  rr my:CodeR.n
-.  rr my:CodeR.z1
-.  rr my:CodeR.z2
-.  rr my:CodeR.a
-.  rr my:CodeR.b
-.\}
-.
-.\"tm fnT-default \*[fnT-default]
-.\"tm fnH-default \*[fnH-default]
-.\"tm fnC-default \*[fnC-default]
-.
-.ds my:fzoom-styles "R I B BI O X V BV IV BIV\""
-.
-.de my:fspecial
-.  if \\n[my:debug-font] .tm \\$0 \\$*
-.  if \\n[.$]>=1 \{\
-.    if F \\$1R  .fspecial \\$1R
-.    if F \\$1I  .fspecial \\$1I
-.    if F \\$1B  .fspecial \\$1B
-.    if F \\$1IB .fspecial \\$1IB
-.    if F \\$1W  .fspecial \\$1W
-.  \}
-.  if \\n[.$]>=2 \{\
-.    if F \\$1R .fspecial \\$1R  \\$2R
-.    if F \\$1I \{\
-.      ie F \\$2I  .fspecial \\$1I \\$2I
-.      el .fspecial \\$1I \\$2R
-.    \}
-.    if F \\$1B .fspecial \\$1B \\$2B
-.    if F \\$1BI \{\
-.      ie F \\$2BI .fspecial \\$1BI \\$2BI
-.      el .fspecial \\$1BI \\$2B
-.    \}
-.    if F \\$1W \{\
-.      ie F \\$2W .fspecial \\$1W \\$2W
-.      el .fspecial \\$1W \\$2R
-.      ie F \\$2W .fspecial \\$1W \\$2W
-.      el .fspecial \\$1W \\$2R
-.    \}
-.  \}
+.de my:getfam
+.  my:*getfam \\$1 R B BI I BIV BV IV V
 ..
-.de my:fzoomf
-.  if \\n[my:debug-font] .tm \\$0 \\$*
-.  ds my:fzoomf-family \\$1
-.  nr my:fzoomf-factor \\$2
-.  shift 2
-.  while (\\n(.$ > 0) \{\
-.    if F\\*[my:fzoomf-family]\\$1 \
-.    fzoom \\*[my:fzoomf-family]\\$1 \\n[my:fzoomf-factor]
-.    shift
-.  \}
-..
-.de my:fzoom
-.  if \\n[my:debug-font] .tm \\$0 \\$*
-.  nr my:fzoom-szoom \\$3
-.  if \\n[my:fzoom-szoom]=0 .nr my:fzoom-szoom 1000
-.  nr my:fzoom-factor \\$4
-.  if \\n[my:fzoom-factor]=0 .nr my:fzoom-factor 1000
-.  nr my:fzoom-\\$1.h 1000
-.  nr my:fzoom-\\$2.h \\n[my:fzoom-szoom]
-.  nr my:fzoom (\\n[my:fzoom-factor] * \\n[my:fzoom-\\$2.h] / \\n[my:fzoom-\\$1.h])
-.  my:fzoomf \\$2 \\n[my:fzoom-factor] \\*[my:fzoom-styles]
-.  my:fzoomf \\$1 \\n[my:fzoom] \\*[my:fzoom-styles]
-..
-.
-.de my:ftr
-.  if \\n[my:debug-font] .tm \\$0 \\$*
-.  if \\n[.$]>=1 \{\
-.    if F \\$1 .ftr \\$1 \\$2
-.  \}
-.  if \\n[.$]>=2 \{\
-.    if F \\$1 .ftr \\$1 \\$2
-.  \}
-..
-.
-.de my:fconfig
-.  if \\n[my:debug-font] .tm \\$0 \\$*
-.  if \\n[.$]=0 .return
-.  if \\n[.$]=1 \{\
-.     my:fconfig \\$1 \\*[fn\\$1-default]
-.     return
-.  \}
-.  ds my:font \\$1
+.de my:*getfam
+.  if \\n[my:debug-font]>=2 .tm # \\$0 \\$*
+.  ds my:*getfam*x \\$1
+.  ds my:*getfam*y \\*[\\$1]
 .  shift
-.  nr my:font-ftr 0
-.  nr my:fconfig-zoom 1000
-.  nr my:fconfig-szoom 1000
-.  while \\n(.$ \{\
-.    ds my:font-c \\$1
-.    substring my:font-c 0 0
-.    ie !'\\*[my:font-c]'-' .break
-.    el \{ .ie '\\$1'-ftr' \{\
-.      nr my:font-ftr 1
+.  while (\\n[.$] > 0) \{\
+.    length my:*getfam*len \\$1
+.    ds my:*getfam*sty \\*[my:*getfam*y]
+.    substring my:*getfam*sty -\\n[my:*getfam*len] -1
+.    if '\\*[my:*getfam*sty]'\\$1' \{\
+.      ds \\*[my:*getfam*x] \\*[my:*getfam*y]
+.      substring \\*[my:*getfam*x] 0 -\\n[my:*getfam*len]
+.      chop \\*[my:*getfam*x]
+.      return
 .    \}
-.    el \{ .ie '\\$1'-zoom' \{\
-.      shift
-.      nr my:fconfig-zoom \\$1
-.    \}
-.    el \{ .ie '\\$1'-szoom' \{\
-.      shift
-.      nr my:fconfig-szoom \\$1
-.    \}
-.    el \{ .ie '\\$1'-debug' \{\
-.      nr my:fconfig-debug 1
-.    \}
-.    el \{\
-.      tm \\n(.F:\\n(.c: config error: -dfn\\*[my:font]='\\$*'
-.    \}\}\}\}\}
 .    shift
 .  \}
-.
-.  my:ftr \\*[my:font]R
-.  my:ftr \\*[my:font]I
-.  my:ftr \\*[my:font]B
-.  my:ftr \\*[my:font]BI
-.  my:ftr \\*[my:font]O
-.  my:ftr \\*[my:font]X
-.  my:ftr \\*[my:font]
-.  my:ftr \\*[my:font]W
-.
-.  if !'\\$1'\\*[my:font]' \{\
-.    my:fspecial \\*[my:font] \\$1
-.  \}
-.  if \\n[my:fconfig-zoom]>=0 \{\
-.    my:fzoom \\$1 \\*[my:font] \\n[my:fconfig-szoom] \\n[my:fconfig-zoom]
-.  \}
-.
-.  if \\n[my:font-ftr] \{\
-.    my:ftr \\*[my:font]R  \\$1R
-.    my:ftr \\*[my:font]I  \\$1I
-.    my:ftr \\*[my:font]B  \\$1B
-.    my:ftr \\*[my:font]BI \\$1BI
-.    my:ftr \\*[my:font]O  \\$1I
-.    my:ftr \\*[my:font]X  \\$1BI
-.    my:ftr \\*[my:font]   \\$1R
-.    if '\\*[my:font]'C' \{\
-.      my:ftr \\*[my:font]W  \\$1R
+.  ds \\*[my:*getfam*x] "\""
+..
+.de my:fspecial
+.  if \\n[my:debug-font] .tm # \\$0 \\$*
+.  ie '\\$0'my:fzoom' .nr my:fzoom 1
+.  el .nr my:fzoom 0
+.  ds my:fam \\$1
+.  my:getfam my:fam
+.  ds my:tmp \\$2
+.  my:getfam my:tmp
+.  length my:sty_pos \\*[my:tmp]
+.  nr my:dummy \\w'\f[\\$1]M\fP'
+.  nr \\$1.h (\\n[rst] - \\n[rsb])
+.  if \\n[my:debug-font]>=2 .tm nr \\$1.h \\n[\\$1.h]
+.  nr my:dummy \\w'\f[\\$2]M\fP'
+.  nr \\$2.h (\\n[rst] - \\n[rsb])
+.  if \\n[my:debug-font]>=2 .tm nr \\$2.h \\n[\\$2.h]
+.  ie \\n[\\$2.zoom]>0 \
+.    nr my:zoom (\\n[\\$2.zoom] * \\n[\\$1.h] / \\n[\\$2.h])
+.  el \
+.    nr my:zoom (1000 * \\n[\\$1.h] / \\n[\\$2.h])
+.  nr \\$2.zoom \\n[my:zoom]
+.  shift
+.  my:*fspecial \\$*
+..
+.de my:*fspecial
+.  while (\\n[.$] > 0) \{\
+.    if F \\$1 \{\
+.      ds my:tmp \\$1
+.      substring my:tmp \\n[my:sty_pos] -1
+.      ds my:font \\*[my:fam]\\*[my:tmp]
+.      if \\n[my:debug-font]>=2 .tm fzoom \\$1 \\n[my:zoom]
+.      fzoom \\$1 \\n[my:zoom]
+.      if F\\*[my:font] \{\
+.        if !\\n[my:fzoom] \{\
+.          if \\n[my:debug-font]>=2 .tm fspecial \\*[my:font] \\$1
+.          fspecial \\*[my:font] \\$1
+.        \}
+.      \}
+.      rm \\$1.s
+.      if \\n[fn-s] \{\
+.        if F\\$1.s \{\
+.          ds \\$1.s \\$1.s
+.          if \\n[my:debug-font]>=2 .tm fzoom \\$1.s \\n[my:zoom]
+.          fzoom \\$1.s \\n[my:zoom]
+.          if !\\n[my:fzoom] \{\
+.            ie F\\*[my:font] \{\
+.              if \\n[my:debug-font]>=2 .tm fspecial \\*[my:font] \\$1 \\*[\\$1.s]
+.              fspecial \\*[my:font] \\$1 \\*[\\$1.s]
+.            \}
+.            el \{\
+.              if \\n[my:debug-font]>=2 .tm fspecial \\$1 \\*[\\$1.s]
+.              fspecial \\$1 \\*[\\$1.s]
+.            \}
+.          \}
+.        \}
+.      \}
 .    \}
+.    shift
 .  \}
 ..
+.de my:fspecial2
+.  if \\n[my:debug-font] .tm # \\$0 \\$*
+.  ds my:fam \\$1
+.  my:getfam my:fam
+.  ds my:tmp \\$2
+.  my:getfam my:tmp
+.  length my:sty_pos \\*[my:tmp]
+.  nr my:zoom \\n[\\*[my:tmp]R.zoom]
+.  shift
+.  my:*fspecial \\$*
+..
+.als my:fzoom my:fspecial
 .
-.my:fconfig T \*[fnT]
-.my:fconfig H \*[fnH]
-.my:fconfig C \*[fnC]
+.my:fspecial  TR  MR  MI  MB  MBI
+.my:fzoom     TR  HR  HI  HB  HBI
+.my:fspecial  HR  GR  GI  GB  GBI
+.nr CR.zoom 800
+.my:fzoom     TR  CR  CI  CB  CBI
+.my:fspecial  CR  GMR GMI GMB GMBI
+.
+.if \n[fn-v] \{\
+.  my:fspecial2 TR  MV  MIV MBV MBIV
+.  my:fspecial2 HR  GV  GIV GBV GBIV
+.\}
 .
 .nr pp:spacewidth \w'\f(TR \fP'
 .

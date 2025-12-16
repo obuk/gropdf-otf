@@ -5,16 +5,25 @@ usage:
 include Mk/*.mk
 
 all::	needrestart-auto
-	${MAKE} -f groff.mk clean install
-	${MAKE} -f site-tmac.mk clean install
-	${MAKE} -f gropdf.mk clean install
-	${MAKE} -f prepro.mk clean install
-	#${MAKE} -f font-haranoaji.mk clean install
-	${MAKE} -f font-haranoaji.mk FAM=G clean install
-	${MAKE} -f font-haranoaji.mk FAM=M R=Medium B=Heavy clean install
+
+install::	install-groff
+install-groff:	needrestart-auto
+	${MAKE} -f groff.mk install
+	${MAKE} -f site-tmac.mk install
+
+install::	install-gropdf
+install-gropdf:	needrestart-auto install-groff
+	${MAKE} -f gropdf.mk install
+
+install:: install-fonts
+install-fonts:	install-groff install-gropdf
+	${MAKE} -f font-haranoaji.mk clean install
 	${MAKE} -f font-haranoaji-code.mk clean install
-	${MAKE} -f font-ipamj.mk clean install
-	#${MAKE} GROPDF_DEBUG= sample
+	#${MAKE} -f font-haranoaji.mk FOUNDRY=H FAM=G clean install
+	#${MAKE} -f font-haranoaji.mk FOUNDRY=H FAM=M R=Medium B=Heavy clean install
+	${MAKE} -f font-noto-cjk.mk FOUNDRY=N clean install
+	${MAKE} -f font-noto-code-cjk.mk FOUNDRY=N clean install
+	#${MAKE} -f font-ipamj.mk clean install
 
 needrestart-auto:
 	perl -e "eval for <>; exit 0 if \$$nrconf{restart} eq 'a'; exit 1" \
@@ -25,9 +34,14 @@ clean::
 	${MAKE} -f groff.mk clean
 	${MAKE} -f site-tmac.mk clean
 	${MAKE} -f gropdf.mk clean
-	${MAKE} -f prepro.mk clean
 	${MAKE} -f font-haranoaji.mk clean
 	${MAKE} -f font-haranoaji-code.mk clean
+	${MAKE} -f font-haranoaji.mk FOUNDRY=H FAM=G clean
+	${MAKE} -f font-haranoaji.mk FOUNDRY=H FAM=M R=Medium B=Heavy clean
+	${MAKE} -f font-noto-cjk.mk FOUNDRY=N clean
+	${MAKE} -f font-noto-code-cjk.mk FOUNDRY=N clean
+	${MAKE} -f font-ipamj.mk clean
+	${MAKE} -f man-db.mk clean
 	rm -f *.git
 	rm -f *.pkg
 	rm -f *.cpanm
@@ -39,19 +53,22 @@ clean::
 install::	all
 
 # sample
-GROFF?=		env GROPDF_OPTIONS= ${GROFF_BIN}/groff
-GROFF+=		-Tpdf $(if ${PAPERSIZE},-dpaper=${PAPERSIZE}) \
-		$(patsubst %,-P%,${GROPDF_OPTIONS} \
-			$(if ${PAPERSIZE},-p${PAPERSIZE}) \
-			${GROPDF_DEBUG} \
-		)
-GROFF+=		-rpp:hemsp-width=12
-#GROFF+=		-rpp:debug=1
+#GROFF?=		env GROPDF_OPTIONS= ${GROFF_BIN}/groff $(GROFF_OPTIONS)
+GROFF?=		env GROPDF_OPTIONS= GROFF_BIN_PATH=${GROFF_BIN} \
+			${GROFF_BIN}/groff $(GROFF_OPTIONS)
+GROFF+=		-Tpdf -dpaper=${PAPERSIZE} \
+			$(patsubst %,-P%,${GROPDF_OPTIONS} ${GROPDF_DEBUG})
 
-GROPDF_DEBUG?=	-d --pdfver=1.4
+GROFF_OPTIONS?=
+#GROFF_OPTIONS+=	-rmy:debug-font=1
+#GROFF_OPTIONS+=	-rpp:debug=1
+#GROFF_OPTIONS+=	-rpp:hemsp-width=12
+
 GROPDF_OPTIONS?=
 #GROPDF_OPTIONS+=	-e
-#GROPDF_OPTIONS+=	--opt=7
+#GROPDF_OPTIONS+=	--opt=5
+
+GROPDF_DEBUG?=	-d --pdfver=1.4
 
 SAMPLE?=	groff gropdf groff.7 groff_font groff_char groff_out
 

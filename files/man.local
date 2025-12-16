@@ -3,11 +3,19 @@
 .
 .\" Expand line gap in japanese.
 .if t \{\
-.  if "\*[locale]"japanese" \{\
+.  if '\*[locale]'japanese' \{\
+.    ie dan*reset-text-parameters \{\
+.am1 an*reset-text-parameters
+.  nr VS (\\n[PS] * 180 / 100)
+.  vs \\n[VS]u
+..
+.    \}
+.    el \{\
 .am1 TH
 .  nr VS (\\n[PS] * 180 / 100)
 .  vs \\n[VS]u
 ..
+.    \}
 .  \}
 .\}
 .
@@ -16,7 +24,8 @@
 .
 .\" Use headings as bookmarks.
 .if t \{\
-.  nr PDFBOOKMARK.NOASCIIFY 1
+.  if '\*[locale]'japanese' \
+.    nr PDFBOOKMARK.NOASCIIFY 1
 .  if !dan*bookmark \{\
 .rn SH an-SH
 .de SH
@@ -78,6 +87,7 @@
 .    an-UE \\$@
 ..
 .
+.ig endig
 .if (\n[cR]=0)&(\n[mPDF]) \{\
 .  nr my:an-in-pdfhref 0
 .
@@ -124,3 +134,4 @@
 .\}
 .
 .\" End
+.endig

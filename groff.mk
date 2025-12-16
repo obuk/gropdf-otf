@@ -6,8 +6,8 @@ usage:
 include Mk/*.mk
 
 groff.git?=	https://git.savannah.gnu.org/git/groff.git
-groff.dir?=	/vagrant/groff
-GROFF_TAG?=	refs/tags/${GROFF_VERSION}
+groff.dir?=	$(CURDIR)/groff
+#GROFF_TAG?=	refs/tags/${GROFF_VERSION}
 
 all::	groff.all
 
@@ -21,8 +21,9 @@ groff.configure:	groff.git automake.pkg autoconf.pkg libtool.pkg		\
 	[ $(groff.dir) ]
 	cd $(groff.dir); \
 	git reset --hard; \
-	[ ! -z "$(GROFF_TAG)" ] && git checkout $(GROFF_TAG); \
+	git checkout master; \
 	echo git pull origin master; \
+	[ ! -z "$(GROFF_TAG)" ] && git checkout $(GROFF_TAG); \
 	[ -f ./bootstrap ] && ./bootstrap; \
 	./configure --prefix=${GROFF_PREFIX}
 	touch $@
@@ -46,10 +47,16 @@ clean::
 
 install:: all
 	[ ! -L text.map ] || sudo rm -f text.map
-	sudo make -C $(groff.dir) $@
-	if [ ! -L "${SITE_TMAC}" -o "$$(readlink ${SITE_TMAC})" != "/etc/groff" ]; then \
-		sudo mv ${SITE_TMAC} ${SITE_TMAC}.old; \
-		sudo ln -s /etc/groff ${SITE_TMAC}; \
-	fi
+	make -C $(groff.dir) $@
 	cd ${GROFF_FONT}/devps/generate; \
-	[ -f text.map ] || sudo ln -s textmap text.map
+	[ -f text.map ] || ln -s textmap text.map
+	case "${SITE_TMAC}" in \
+	${HOME}|${HOME}/*) \
+		;; \
+	/usr/share/groff/*|/usr/local/share/groff/*) \
+		if [ ! -L "${SITE_TMAC}" -o "$$(readlink ${SITE_TMAC})" != "/etc/groff" ]; then \
+			sudo mv ${SITE_TMAC} ${SITE_TMAC}.old; \
+			sudo ln -s /etc/groff ${SITE_TMAC}; \
+		fi; \
+		;; \
+	esac

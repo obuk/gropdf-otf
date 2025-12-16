@@ -6,20 +6,24 @@ VPATH+=		files
 
 all::	tmp/pdf.tmac tmp/ps.tmac
 
-FILES?=	tmp/man.local tmp/mdoc.local tmp/pdf.tmac	\
+FILES?=	tmp/man.local tmp/mdoc.local \
 		pdf.local tmp/ps.tmac tmp/ps.local
+
 ifeq "${GROFF_VERSION}" "1.23.0"
 FILES+=	tmp/an.tmac
 endif
 
 install:: ${FILES}
-	sudo install -b -m644 $^ /etc/groff
-	cd /etc/groff && \
-	for f in $(notdir $^); do \
-	  if [ -f $$f~ ]; then \
-	    cmp -s $$f~ $$f && sudo mv $$f~ $$f; \
-	  fi; \
-	done
+	case "${SITE_TMAC}" in \
+	${HOME}|${HOME}/*) \
+		mkdir -p ${SITE_TMAC}; \
+		install -m644 $^ ${SITE_TMAC}; \
+		;; \
+	*) \
+		sudo mkdir -p ${SITE_TMAC}; \
+		sudo install -m644 $^ ${SITE_TMAC}; \
+		;; \
+	esac
 
 clean::
 	rm -rf tmp
@@ -41,14 +45,21 @@ tmp/ps.tmac:	ps.tmac
 .' $< >$@
 
 tmp/%.local:	%.local
-	cd /etc/groff && \
+	cd ${SITE_TMAC} && \
 	if [ ! -f $(notdir $@).dist ]; then \
-		[ ! -f $(notdir $@) ] && sudo touch $(notdir $@); \
-		sudo mv $(notdir $@) $(notdir $@).dist; \
+		case "${SITE_TMAC}" in \
+		${HOME}|${HOME}/*) \
+			[ -f $(notdir $@) ] || touch $(notdir $@); \
+			mv $(notdir $@) $(notdir $@).dist; \
+			;; \
+		*) \
+			[ -f $(notdir $@) ] || sudo touch $(notdir $@); \
+			sudo mv $(notdir $@) $(notdir $@).dist; \
+			;; \
+		esac; \
 	fi
 	mkdir -p tmp
-	[ -f /etc/groff/$(notdir $@).dist ]
-	cat /etc/groff/$(notdir $@).dist $< >$@
+	cat ${SITE_TMAC}/$(notdir $@).dist $< >$@
 
 tmp/an.tmac:	an.tmac
 	mkdir -p tmp

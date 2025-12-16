@@ -5184,7 +5184,7 @@ my %AGL_to_unicode = (
 );
 
 my $prog = $0;
-my $groff_sys_fontdir = "/usr/local/share/groff/current/font";
+my $groff_sys_fontdir = $ENV{GROFF_SYS_FONT} || "/usr/local/share/groff/current/font";
 my $want_help;
 my $space_width = 0;
 
@@ -5292,17 +5292,6 @@ my $outfile = $opt_o || $fontfile;
 my $desc = $opt_d || "DESC";
 my $sys_map = $groff_sys_fontdir . "/devps/generate/" . $map;
 my $sys_desc = $groff_sys_fontdir . "/devps/" . $desc;
-
-=begin comment
-
-my %unicode_to_AGL;
-while (my ($name, $unicode) = each %AGL_to_unicode) {
-    push @{$unicode_to_AGL{$unicode}}, $name;
-}
-
-=end comment
-
-=cut
 
 my %gid_to_utf8;
 my %gid_hint;
@@ -5693,9 +5682,8 @@ sub gid_to_glyphname {
     for my $u (@{$gid_to_utf8{$gid}}) {
 	my @u = unpack "U*", $u;
 	my $hex = join '_' => map sprintf("%04X", $_), @u;
-	#push @psname, grep defined && !$seen{$_}++, @{$unicode_to_AGL{$hex}};
 	while (my ($name, $unicode) = each %AGL_to_unicode) {
-	    push @psname, $name if $unicode eq $hex;
+	    push @psname, $name if defined $unicode && $unicode eq $hex;
 	}
     }
     wantarray? @psname : $psname[0];
@@ -5732,12 +5720,8 @@ while (<MAP>) {
 		 "the PostScript character 'space'";
 	}
 	else {
-	    my $utmp = $AGL_to_unicode{$field[0]};
-	    my @utmp;
 	    my %seen;
-	    for ($utmp) {
-		push @utmp, $_ if defined && !$seen{$_}++;
-	    }
+	    my @utmp = grep defined && !$seen{$_}++, $AGL_to_unicode{$field[0]};
 	    if ($iscidfont) {
 		#next unless defined (my $cid = glyphname_to_cid($field[0]));
 		next unless defined $utmp[0];
@@ -5745,14 +5729,12 @@ while (<MAP>) {
 		$field[0] = $cid;
 
 		my $gid = $cid2gid->[$cid];
-		for my $u8 (@{$gid_to_utf8{$gid}}) {
-		    my $u16 = join '_', map { sprintf "%04X", $_ }
-			unpack "n*", encode "UTF16-BE", $u8;
-		    for ($u16) {
-			push @utmp, $_ if !$seen{$_}++;
-		    }
+		for (grep defined, @{$gid_to_utf8{$gid}}) {
+		    push @utmp, join '_', map { sprintf "%04X", $_ }
+			unpack "n*", encode "UTF16-BE", $_;
 		}
-
+		my $u8 = pack 'U*', map hex($_), split '_', $utmp[0];
+		@{$gid_to_utf8{$gid}} = grep !$seen{$_}++, $u8, @{$gid_to_utf8{$gid}};
 	    }
 
 	    $nmap{$field[0]} += 0;
@@ -5808,6 +5790,7 @@ sub depth_of {
 $italic_angle = $opt_a if $opt_a;
 
 
+# Don’t use the built‐in Adobe Glyph List.
 if (!$opt_x) {
     my %mapped;
     my $i = ($#encoding > 256) ? ($#encoding + 1) : 256;
@@ -6148,6 +6131,7 @@ print("\n");
 print("charset\n");
 for (my $i = 0; $i <= $#encoding; $i++) {
     my $ch = $encoding[$i];
+    next unless defined $ch;
     #if (defined $ch && $ch ne "" && $ch ne "space") {
     if (defined $ch && $ch ne "" &&
 	# $ch ne "space"
@@ -6439,6 +6423,12 @@ sub ot_feature {
 
 # Local Variables:
 # fill-column: 72
+# tab-width: 8
+# indent-tabs-mode: t
 # mode: CPerl
+# cperl-indent-level: 4
+# cperl-continued-statement-offset: 4
+# cperl-close-paren-offset: -4
+# cperl-indent-parens-as-block: t
 # End:
 # vim: set cindent noexpandtab shiftwidth=2 softtabstop=2 textwidth=72:

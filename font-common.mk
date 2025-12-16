@@ -1,11 +1,10 @@
 # font-common.mk
 
-VPATH+=	${GROFF_FONT}/devps/generate
-
 #M=	HaranoAjiMincho
 #G=	HaranoAjiGothic
 
 FOUNDRY?=
+NOKERNPAIRS?=
 
 R?=	Regular
 B?=	Bold
@@ -19,71 +18,82 @@ BIV?=	$B
 FAM?=	M G
 STY?=	R I B BI V IV BV BIV
 
-TEXTMAP?=	text.map
-TEXTENC?=	text.enc
-OTFTODIT?=	perl ./files/otftodit.pl
-#OTFTODIT_OPTS?=	-e $(TEXTENC)
-OTFTODIT_OPTS?=	-s
-OTFTODIT_OPTS+=	-c
-#OTFTODIT_OPTS+=	-S
+TEXTMAP?=	${GROFF_FONT}/devps/generate/text.map
+TEXTENC?=	${GROFF_FONT}/devps/text.enc
+DESC?=		${GROFF_FONT}/devps/DESC
+
+OTFTODIT_OPTS?=	-e $(TEXTENC) -d $(DESC) -cS
+FILTERFONT_OPTS?=	-012k
+SUPP_SUFFIX?=	.s
+
 EMBED?=
+SPLIT?=
 
 ROPTS?=		-F palt="*,*,palt"
 IOPTS?=		$(ROPTS) -i 50 -m -a 12
 BOPTS?=		$(ROPTS)
 BIOPTS?=	$(IOPTS)
-VOPTS?=		-V -F palt="*,*,vpal" -F vert="*,*,vrt2\|vkna"
-#VOPTS?=		-V -F palt="*,*,vpal" -F vert="*,*,vert\|vkna"
+VOPTS?=		-V -F palt="*,*,vpal" -F vert="*,*,vrt2|vkna"
 IVOPTS?=	$(VOPTS) -i 50 -a -12
 BVOPTS?=	$(VOPTS)
 BIVOPTS?=	$(IVOPTS)
 
-fix-mc:		text.map
-	sed '/^mu mc$$/s/^/#/' $< >a.map
-	mv a.map text.map
-
-clean::
-	rm -f text.map
-
-otftodit.pl:	plenv Encode.cpanm Getopt-Long.cpanm fonttools.pip
-
 define make_font?=
 all::	$1$2
-$1$2: $($1)-$($2).otf $($1)-$($2).afm otftodit.pl
-	@echo cd $(CURDIR) ';' set -x ';' \
-	$(OTFTODIT) $(OTFTODIT_OPTS) $($(2)OPTS) $$< $$(word 2,$$^) $(TEXTMAP) $$@ '2>' $$@.err '||' \
-	rm -f $$@ | bash -l
-	@if grep -q "already mapped to groff name 'mc'" $$@.err; then \
-		rm -f $1$2; \
-		$(MAKE) -f $(firstword $(MAKEFILE_LIST)) fix-mc; \
-		$(MAKE) -f $(firstword $(MAKEFILE_LIST)) clean-$1$2 $1$2; \
+$1$2: $($1)-$($2).otf $($1)-$($2).afm otftodit filter-font
+	otftodit $(OTFTODIT_OPTS) $($(2)OPTS) $$< $$(word 2,$$^) $(TEXTMAP) $$@ 2> $$@.err
+	if grep -q "already mapped to groff name 'mc'" $$@.err; then \
+		sed '/^mu mc$$$$/s/^/#/' $(TEXTMAP) >text.map; \
+		$(MAKE) -f $(firstword $(MAKEFILE_LIST)) TEXTMAP=text.map clean-$1$2 $1$2; \
+		rm -f text.map; \
 	else \
 		cat $$@.err; \
 	fi
-	@[ -f $$@ ]
 	@rm -f $$@.err
-
-install:: install-$1$2
-install-$1$2:	$1$2
-	sudo mkdir -p ${SITE_FONT}/devpdf
+	mkdir -p /tmp/devpdf
 ifeq "$(FOUNDRY)" ""
-	sudo install -m644 $1$2 $(SITE_FONT)/devpdf/
+ifeq "$(SPLIT)" ""
+	cat $1$2 \
+	> /tmp/devpdf/$1$2
+	> /tmp/devpdf/$1$2${SUPP_SUFFIX}
 else
-	sudo install -m644 $1$2 $(SITE_FONT)/devpdf/$(FOUNDRY)-$1$2
-	sudo sed -i '/^name $1$2/s//name $(FOUNDRY)-$1$2/' \
-				$(SITE_FONT)/devpdf/$(FOUNDRY)-$1$2
+	filter-font $(FILTERFONT_OPTS) $1$2 > /tmp/devpdf/$1$2
+	filter-font $(FILTERFONT_OPTS) -s -n $1$2${SUPP_SUFFIX} $1$2 > /tmp/devpdf/$1$2${SUPP_SUFFIX}
 endif
-clean::	clean-$1$2
-clean-$1$2:
-	rm -f $1$2 $1$2.download
+ifneq "$(NOKERNPAIRS)" ""
+	sed -i -e '/^kernpairs/,/^$$$$/d' /tmp/devpdf/$1$2
+endif
+	sed -i -e '/^kernpairs/,/^$$$$/d' /tmp/devpdf/$1$2${SUPP_SUFFIX}
+else
+ifeq "$(SPLIT)" ""
+	cat $1$2 | sed \
+	-e '/^name $1$2/s//name ${FOUNDRY}-$1$2/' \
+	> /tmp/devpdf/${FOUNDRY}-$1$2
+	> /tmp/devpdf/${FOUNDRY}-$1$2${SUPP_SUFFIX}
+else
+	filter-font $(FILTERFONT_OPTS) -n ${FOUNDRY}-$1$2 $1$2 > /tmp/devpdf/${FOUNDRY}-$1$2
+	filter-font $(FILTERFONT_OPTS) -s -n ${FOUNDRY}-$1$2${SUPP_SUFFIX} $1$2 > /tmp/devpdf/${FOUNDRY}-$1$2${SUPP_SUFFIX}
+endif
+ifneq "$(NOKERNPAIRS)" ""
+	sed -i -e '/^kernpairs/,/^$$$$/d' /tmp/devpdf/${FOUNDRY}-$1$2
+endif
+	sed -i -e '/^kernpairs/,/^$$$$/d' /tmp/devpdf/${FOUNDRY}-$1$2${SUPP_SUFFIX}
+endif
 
-#download-files: $1$2.download
+all::	$1$2.download
 $1$2.download: $($1)-$($2).otf $1$2
-	printf "\t%s\t%s\n" `sed -n '/^internalname\s/{s///;p;q}' $(1)$(2)` \
+	printf "\t%s\t%s\n" `sed -n '/^internalname\s/{s///;p;q}' $1$2` \
 		${EMBED}$$(abspath $$<) >$$@ || rm -f $$@
-clean-download::
+
+clean-$1$2:
+	rm -f $1$2
 	rm -f $1$2.download
+
+clean::	clean-$1$2
 endef
+
+clean::
+	rm -rf /tmp/devpdf
 
 $(foreach fam,${FAM}, $(foreach sty,${STY}, \
   $(eval $(call make_font,$(fam),$(sty))) \
@@ -94,15 +104,28 @@ download-files=	\
 
 download:	files/merge-download-files.pl $(download-files)
 	perl $< $(if ${FOUNDRY}, -y ${FOUNDRY}) \
-		$(SITE_FONT)/devpdf/download $(download-files) >$@
+		${SITE_FONT}/devpdf/download $(download-files) > $@
 
-install::	install-download
-install-download:	download
-	sudo mkdir -p ${SITE_FONT}/devpdf
-	sudo install -m644 download $(SITE_FONT)/devpdf/
-clean::	clean-download
-clean-download::
+install::	all download
+	mkdir -p /tmp/devpdf
+	cp download /tmp/devpdf
+	case "${SITE_FONT}" in \
+	${HOME}|${HOME}/*) \
+		mkdir -p ${SITE_FONT}/devpdf; \
+		install -m644 /tmp/devpdf/* ${SITE_FONT}/devpdf; \
+		find ${SITE_FONT}/devpdf -empty -delete; \
+		;; \
+	*) \
+		sudo mkdir -p ${SITE_FONT}/devpdf; \
+		sudo install -m644 /tmp/devpdf/* ${SITE_FONT}/devpdf; \
+		sudo find ${SITE_FONT}/devpdf -empty -delete; \
+		;; \
+	esac
+
+clean::
 	rm -f download
 
-%.afm:		%.otf afdko.pip
-	bash -lc 'tx -afm $< ' >$@
+%.afm:	%.otf tx
+	[ -f $@ ] || tx -afm $< >$@
+
+include font-util.mk

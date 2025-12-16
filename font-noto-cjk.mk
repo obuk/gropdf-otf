@@ -5,28 +5,28 @@ include Mk/*.mk
 
 # override C (experimental)
 FAM?=	M G
+STY?=	R I B BI
 CN?=	jp
 jp=	0
 M?=	NotoSerifCJK${CN}
 G?=	NotoSansCJK${CN}
-EMBED=	*
+EMBED?=	*
+FOUNDRY?=
 
 R?=	Regular
 B?=	Bold
-
-CTTC?=	perl files/cttc.pl
 
 D=	/usr/share/fonts/opentype/noto
 TTC=	$(foreach font,$(foreach fam,${FAM},$(patsubst %${CN},%,$($(fam)))),\
 		$D/${font}-$R.ttc $D/${font}-$B.ttc)
 
-${TTC}:	fonts-noto-cjk.pkg
+${TTC}:	fonts-noto-cjk.pkg fonts-noto-cjk-extra.pkg
 
-%${CN}-$R.otf:	$D/%-$R.ttc
-	bash -lc '$(CTTC) $< $(${CN})' >$@
+%${CN}-$R.otf:	$D/%-$R.ttc cttc
+	cttc $< $(${CN}) >$@
 
-%${CN}-$B.otf:	$D/%-$B.ttc
-	bash -lc '$(CTTC) $< $(${CN})' >$@
+%${CN}-$B.otf:	$D/%-$B.ttc cttc
+	cttc $< $(${CN}) >$@
 
 FONTNAMES=	$(foreach fam,${FAM},$($(fam))-$R $($(fam))-$B)
 OTF=	$(addsuffix .otf,${FONTNAMES})

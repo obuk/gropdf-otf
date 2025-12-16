@@ -2,23 +2,18 @@ HOME?=		$(shell getent passwd ${USER} |cut -d: -f6)
 PYTHON_VERSION?=	3.10.12
 
 %.pip:	pyenv pip
-	@if [ ! -f $@ ]; then \
-	  echo pip install $*; \
-	  bash -lc 'pip install $*'; \
-	  touch $@; \
-	fi
+	@[ -f $@ ] || bash -lc 'pip install $*'
+	@[ -f $@ ] || touch $@
 
 pip:	pyenv
-	#bash -lc 'pip install --upgrade pip'
+	@[ -x `bash -lc 'pyenv which pip'` ]
 
 pyenv:	pyenv.global
 
 pyenv.dir?=	${HOME}/.pyenv
 
 pyenv.repo:	git.pkg
-	@if [ ! -d "${pyenv.dir}" ]; then \
-	  curl https://pyenv.run | bash; \
-	fi
+	[ -d "${pyenv.dir}" ] || curl https://pyenv.run | bash
 
 pyenv.profile?=	/tmp/dot.profile
 
