@@ -41,7 +41,6 @@ clean::
 	${MAKE} -f font-noto-cjk.mk FOUNDRY=N clean
 	${MAKE} -f font-noto-code-cjk.mk FOUNDRY=N clean
 	${MAKE} -f font-ipamj.mk clean
-	${MAKE} -f man-db.mk clean
 	rm -f *.git
 	rm -f *.pkg
 	rm -f *.cpanm
