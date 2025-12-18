@@ -28,12 +28,16 @@ use Encode qw(encode decode);
 use POSIX qw(mktime);
 use File::Spec;
 
-our $VERSION = "2025.12.12";
+our $VERSION = "2025.12.17";
 
 use List::Util qw(min max sum uniq);
 use File::Temp qw/tempfile/;
 use Unicode::UCD qw/charblocks/;
 use Font::TTF::Font;
+
+#use Data::Dumper qw(Dumper);
+#$Data::Dumper::Indent = 1;
+#$Data::Dumper::Terse = 1;
 
 use constant
 {
@@ -582,22 +586,10 @@ $PDFver=int($PDFver*10)-10;
 
 my $reduce_TJ = 1;
 my $reduce_d3 = 1;	# reduces the number of decimal places
-my $subset_mp =	1;	# performs subsetting in multiple processes
-my $show_subset_etime = 0;	# Show execution time of pyftsubset
 my $prefer_utf16 = 1;	# reduces encoding/decoding by using utf16 as is
 my $cidfontcmap = 1;	# generate ToUnicode CMap for cidfont
 my $reduce_cmap = ($options & CMAPFULL) == 0;
 my $pyftsubset =  ($options & PYFTSUBSET) != 0;
-
-$show_subset_etime = 1 if $subset_mp && $debug;
-if ($show_subset_etime) {
-    $show_subset_etime = 0
-	unless eval {
-	    require Time::HiRes;
-	    Time::HiRes->import(qw/gettimeofday tv_interval/);
-	    1;
-	};
-}
 
 # Search for 'font directory': paths in -f opt, shell var
 # GROFF_FONT_PATH, default paths
@@ -1094,25 +1086,11 @@ for my $fontno (@cidfontno) {
 }
 
 # cidfont pass 2
-
-for my $fontgroup (keys %mfont) {
-    my $mfont = $mfont{$fontgroup};
-    $mfont->{order} = keys %{$mfont->{' cid2uni'}};
-}
-
-my @mfont = map { $mfont{$_} }
-    sort { $mfont{$a}{order} <=> $mfont{$b}{order} }
-    grep { $mfont{$_}{order} }
-    keys %mfont;
-
-my @mfont_embedding;
-
-for my $mfont (@mfont) {
+for my $mfont (values %mfont) {
     my $f = $mfont->{f};
     my $fnt = $f->{FNT};
 
     # CIDFont dictionary (Table 117)
-
     my $cid_font = BuildObj(++$objct, {
 	Type => "/Font",
 	Subtype => "/CIDFontType0",
@@ -1172,83 +1150,42 @@ for my $mfont (@mfont) {
     }
 
     if ($fnt->{embed} || $embedall) {
-	unless ($mfont->{subsetting}) {
-	    $mfont->{subsetting} = 1;
-	    $mfont->{tempfile} = [
-		tempfile(DIR => '/tmp', SUFFIX => '.otf') ];
-	    my $sub_font = $mfont->{tempfile}[1];
-	    if (!$subset_mp) {
-		my @cids = keys %{$mfont->{' cid2uni'}};
-		my @gids = map { $fnt->{' CID2GID'}->[$_] } @cids; # xxxxx
-		if (@gids) {
-		    subset_start($sub_font, $fnt->{fontfile}, @gids);
-		    $mfont->{error} = $?;
-		}
-	    } else {
-		my $pid = fork;
-		if (!defined $pid) {
-		    die "can't fork for $fnt->{fontfile}";
-		} elsif ($pid == 0) {
-		    my @cids = keys %{$mfont->{' cid2uni'}};
-		    my @gids = map { $fnt->{' CID2GID'}->[$_] } @cids; # xxxxx
-		    if (@gids) {
-			my $cff = $fnt->{' OTF'}->{'CFF '};
-			if ($pyftsubset) {
-			    #subset_start($sub_font, $fnt->{fontfile}, @gids);
-			    subset_start($sub_font, $fnt->{fontfile}, @cids);
-			    exit $? >> 8 if $?;
-			} elsif ($cff->can("subset")) {
-			    #my $subset = $cff->subset(@gids);
-			    my $subset = $cff->subset(@cids);
-			    open my ($fd), ">", $sub_font;
-			    $fd->print($subset->as_string);
-			    close $fd;
-			} else {
-			    Die("can't subset $fnt->{name}");
-			}
-		    }
-		    exit 0;
-		} else {
-		    $mfont->{pid} = $pid;
-		    $mfont->{t0} = [ gettimeofday() ]
-			if $show_subset_etime;
-		}
+	my @cids = keys %{$mfont->{' cid2uni'}};
+	my $cff = $fnt->{' OTF'}->{'CFF '};
+	my $subset;
+	if ($pyftsubset) {
+	    my ($fh, $sub_font) = tempfile(DIR => '/tmp', CLEANUP => 1, SUFFIX => '.otf');
+	    my ($gh, $gid_file) = tempfile(DIR => '/tmp', CLEANUP => 1, SUFFIX => '.txt');
+	    print $gh join(',', @cids), "\n";
+	    close $gh;
+	    my @pyftsubset = (
+		"pyftsubset", $fnt->{fontfile}, # $PATH_otf,
+		"--output-file=$sub_font",
+		"--gids-file=$gid_file",
+		'--notdef-glyph',
+		#'--recommended-glyphs',
+	    );
+	    Notice("# @pyftsubset") if $debug; # xxxxx
+	    my $rc = system @pyftsubset;
+	    #unlink $gid_file;
+	    if ($?) {
+		; #Die("$0: can't subset $fnt->{internalname} ($fnt->{name})");
+	    } elsif (my $otf = Font::TTF::Font->open($sub_font)) {
+		$subset = $otf->{'CFF '};
 	    }
-	    push @mfont_embedding, $mfont;
+	    #unlink $sub_font;
+	} elsif ($cff->can("subset")) {
+	    $cff->notdef_glyph(1);
+	    $subset = $cff->subset(@cids);
 	}
-    }
-}
-
-
-for my $mfont (@mfont_embedding) {
-    my $f = $mfont->{f};
-    my $fnt = $f->{FNT};
-
-    if ($mfont->{subsetting} == 1) {
-	$mfont->{subsetting} = 2;
-	if ($subset_mp) {
-	    if (my $pid = $mfont->{pid}) {
-		$mfont->{pid} = undef;
-		waitpid($pid, 0);
-		my $name = ($options & PYFTSUBSET) ?
-		    "pyftsubset" : "subset (font_ttf)";
-		Notice("$name: etime: ".
-		    tv_interval($mfont->{t0}).", ".$fnt->{name})
-		    if $show_subset_etime;
-		$mfont->{error} = $?;
-	    }
-	}
-
-	my $sub_font = $mfont->{tempfile}[1];
-	$mfont->{FONTFILE} = subset_end($sub_font);
-	unlink $sub_font;
-	delete $mfont->{tempfile};
-
-	if ($mfont->{error}) {
-	    warn "$0: can't subset $fnt->{internalname} ($fnt->{name})\n";
-	    $xitcd = 1;
-	} else {
+	if ($subset) {
 	    my $fontname = "/".SubTag().$fnt->{internalname};
+	    $mfont->{FONTFILE} = BuildObj(++$objct, {
+		"Subtype" => "/CIDFontType0C",
+	    });
+	    my $font_stream = $subset->as_string;
+	    $obj[$objct]->{STREAM} = $font_stream;
+	    $obj[$objct]->{DATA}{Length} = length $font_stream;
 	    if (my $p = GetObj($mfont->{font_descriptor})) {
 		$p->{FontFile3} = $mfont->{FONTFILE} if !($options & NOFILE);
 		$p->{FontName} = $fontname;
@@ -1259,88 +1196,10 @@ for my $mfont (@mfont_embedding) {
 	    if (my $p = GetObj($mfont->{cid_font})) {
 		$p->{BaseFont} = $fontname;
 	    }
-	}
-
-    }
-
-}
-
-
-sub subset_start {
-    my ($sub_font, $fontfile, @gids) = @_;
-
-    my ($gh, $gid_file) = tempfile(DIR => '/tmp', SUFFIX => '.txt');
-    #my $gids = join ',', @gids;
-    print $gh join(',', @gids), "\n";
-    close $gh;
-    my @pyftsubset = (
-	"pyftsubset", $fontfile, # $PATH_otf,
-	"--output-file=$sub_font",
-	#"--gids=$gids",
-	"--gids-file=$gid_file",
-	#'--retain-gids',
-	#'--notdef-outline',
-	#'--notdef-glyph',
-	#'--recommended-glyphs',
-	#'--layout-features=*',
-	#'--glyph-names',
-	#'--symbol-cmap',
-	#'--legacy-cmap',
-	#'--desubroutinize',
-	#'--passthrough-tables',
-    );
-
-    Notice("# @pyftsubset") if 1 && $debug; # xxxxx
-    my $rc = system @pyftsubset;
-    unlink $gid_file;
-
-    $rc;
-}
-
-
-sub subset_end {
-    my ($sub_font) = @_;
-
-    my $font_stream;
-    my $subtype;
-    my $otf = Font::TTF::Font->open($sub_font);
-    if ($otf && $otf->{'CFF '}) {
-	my $fh = $otf->{'CFF '}{' INFILE'};
-	$fh->seek($otf->{'CFF '}{' OFFSET'}, 0);
-	$fh->read($font_stream, $otf->{'CFF '}{' LENGTH'});
-	$subtype = "/CIDFontType0C";
-    } else {
-	if (open my $fd, $sub_font) {
-	    1 and do {
-		seek($fd, 0, 0);
-		local $/ = undef;
-		$font_stream = <$fd>;
-	    };
-	    0 and do {
-		my $cff = Font::TTF::CFF_->new(
-		    INFILE => $fd, OFFSET => 0, LENGTH => (stat($fd))[7],
-		    #debug => 1, verbose => 1,
-		    #map { $_ => $opt{$_} } qw/debug verbose/,
-		);
-		$cff->read;
-		$font_stream = $cff->as_string;
-	    };
 	} else {
-	    Warn("can't open '$sub_font'");
-	    $font_stream = '';
+	    Die("can't subset $fnt->{internalname} ($fnt->{name})");
 	}
-	$subtype = "/CIDFontType0C";
-	#$subtype = "/OpenType";
     }
-    #unlink $sub_font;
-
-    my $fontfile = BuildObj(++$objct, {
-	"Subtype" => $subtype,
-    });
-    $obj[$objct]->{STREAM} = $font_stream;
-    $obj[$objct]->{DATA}{Length} = length $font_stream;
-
-    $fontfile;
 }
 
 foreach my $j (0..$#{$pages->{Kids}})
@@ -1414,9 +1273,6 @@ foreach my $maj (0..$#obji)
 }
 
 $objct=$tobjct;
-
-#my $encrypt=BuildObj(++$objct,{'Filter' => '/Standard', 'V' => 1, 'R' => 2, 'P' => 252});
-#PutObj($objct);
 
 my $xrefct=$fct;
 
@@ -4235,6 +4091,8 @@ sub EmbedFont
     return($st+2);
 }
 
+my %otf;			# otf cache XXXXX
+
 sub LoadFont
 {
     my $fontno=shift;
@@ -4442,7 +4300,8 @@ sub LoadFont
 	$fnt{fontfile} = $download{$fontkey}{fontfile};
 	$fnt{embed} = $download{$fontkey}{embed};
 	if ($fnt{opentype}) {
-	    my $otf = Font::TTF::Font->open($fnt{fontfile});
+	    #my $otf = Font::TTF::Font->open($fnt{fontfile});
+	    my $otf = $otf{$fnt{fontfile}} //= Font::TTF::Font->open($fnt{fontfile});
 	    $fnt{' OTF'} = $otf;
 	    while (my ($f, $x) = each %{$fnt{opentype}}) {
 		next if defined $fnt{" \U$f\E"};
@@ -4453,7 +4312,7 @@ sub LoadFont
 		$fnt{" \U$f\E"} = &$f($otf, split /,/, $x);
 	    }
 
-	    $otf->{'CFF '}->read;
+	    $otf->{'CFF '}->read unless $otf->{'CFF '}{TopDICT};
 	    my $gid2cid = $otf->{'CFF '}->Charset->{code};
 	    my $cid2gid;
 	    for my $gid (0 .. $#{$gid2cid}) {
@@ -4461,7 +4320,6 @@ sub LoadFont
 		$cid2gid->[$cid] = $gid if defined $cid;
 	    }
 	    $fnt{' CID2GID'} = $cid2gid;
-	    #$fnt{' GID2CID'} = $gid2cid;
 	    if (my $cidfont = $fnt{cidfont}) {
 		#my $ROS = $otf->{'CFF '}->TopDICT->{ROS};
 		my $ROS = [ split '-', $cidfont ];
