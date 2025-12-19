@@ -588,8 +588,6 @@ my $reduce_TJ = 1;
 my $reduce_d3 = 1;	# reduces the number of decimal places
 my $prefer_utf16 = 1;	# reduces encoding/decoding by using utf16 as is
 my $cidfontcmap = 1;	# generate ToUnicode CMap for cidfont
-my $reduce_cmap = ($options & CMAPFULL) == 0;
-my $pyftsubset =  ($options & PYFTSUBSET) != 0;
 
 # Search for 'font directory': paths in -f opt, shell var
 # GROFF_FONT_PATH, default paths
@@ -1035,7 +1033,10 @@ for my $fontno (@cidfontno) {
 	#$flags += 1 << ( 1 - 1); # FixedPitch
 	$flags += 1 << ( 1 - 1) if $fnt->{' isFixedPitch'};
 	#$flags += 1 << ( 2 - 1); # Serif
-	$flags += 1 << ( 2 - 1) if $fnt->{internalname} =~ /Serif/i;
+	my $serif = $fnt->{special} ? 0 :
+	    $fnt->{internalname} =~ /Sans/i ? 0 :
+	    $fnt->{internalname} =~ /Mincho|Times|Georgia|Baskerville|Garamond|Serif/i ? 1 : 0;
+	$flags += 1 << ( 2 - 1) if $serif;
 	#$flags += 1 << ( 3 - 1); # Symbolic
 	$flags += 1 << ( 3 - 1) if $fnt->{special};
 	#$flags += 1 << ( 4 - 1); # Script
@@ -1078,7 +1079,7 @@ for my $fontno (@cidfontno) {
     while (my ($k, $v) = each %{$fnt->{' cid2chf'}}) {
 	$mfont->{' cid2chf'}{$k} = $v;
     }
-    if ($reduce_cmap) {
+    if (($options & CMAPFULL) == 0) {
 	while (my ($k, $v) = each %{$fnt->{' optgsub'}}) {
 	    $mfont->{' optgsub'}{$k} = $v;
 	}
@@ -1086,6 +1087,12 @@ for my $fontno (@cidfontno) {
 }
 
 # cidfont pass 2
+
+# Create a CIDFont dictionary, then set the glyph widths DW and W (DW2
+# and W2 for vertical writing), ToUnicode, and the embedded font stream.
+# Font::TTF::CFF is used to create the subset font, but pyftsubset can
+# be invoked with --opt on the command line.
+
 for my $mfont (values %mfont) {
     my $f = $mfont->{f};
     my $fnt = $f->{FNT};
@@ -1120,7 +1127,7 @@ for my $mfont (values %mfont) {
     if (my $p = GetObj($mfont->{font_resource})) {
 	$p->{DescendantFonts} = [ $cid_font ];
 	my $tounicode = {};
-	if ($reduce_cmap) {
+	if (($options & CMAPFULL) == 0) {
 	    if ($fnt->{embed} || $embedall) {
 		$tounicode = $mfont->{' cid2uni'};
 	    } else {
@@ -1153,7 +1160,7 @@ for my $mfont (values %mfont) {
 	my @cids = keys %{$mfont->{' cid2uni'}};
 	my $cff = $fnt->{' OTF'}->{'CFF '};
 	my $subset;
-	if ($pyftsubset) {
+	if ($options & PYFTSUBSET) {
 	    my ($fh, $sub_font) = tempfile(DIR => '/tmp', CLEANUP => 1, SUFFIX => '.otf');
 	    my ($gh, $gid_file) = tempfile(DIR => '/tmp', CLEANUP => 1, SUFFIX => '.txt');
 	    print $gh join(',', @cids), "\n";
@@ -4261,6 +4268,10 @@ sub LoadFont
 
     # To see the effect of the USESPACE option in cidfont, comment out.
     $fnt{nospace} = 1 if $fnt{cidfont}; # xxxxx
+
+    # and turn off the option USESPACE to suppress the message "using
+    # nospace mode for ..."
+    $options &= ~USESPACE if $fnt{cidfont} && !$debug;
 
     $fnt{nospace} = 1 if
 	!defined($fnt{NAM}->{space}->[PSNAME]) or
