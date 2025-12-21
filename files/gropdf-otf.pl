@@ -28,7 +28,7 @@ use Encode qw(encode decode);
 use POSIX qw(mktime);
 use File::Spec;
 
-our $VERSION = "2025.12.17";
+our $VERSION = "2025.12.21";
 
 use List::Util qw(min max sum uniq);
 use File::Temp qw/tempfile/;
