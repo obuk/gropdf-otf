@@ -587,7 +587,7 @@ $PDFver=int($PDFver*10)-10;
 my $reduce_TJ = 1;
 my $reduce_d3 = 1;	# reduces the number of decimal places
 my $prefer_utf16 = 1;	# reduces encoding/decoding by using utf16 as is
-my $cidfontcmap = 1;	# generate ToUnicode CMap for cidfont
+#my $cidfontcmap = 1;	# generate ToUnicode CMap for cidfont
 
 # Search for 'font directory': paths in -f opt, shell var
 # GROFF_FONT_PATH, default paths
@@ -1135,7 +1135,7 @@ for my $mfont (values %mfont) {
 		    $fnt->{' CIDSystemInfo'}{Registry} =~ /^\((.*?)\)$/,
 		    $fnt->{' CIDSystemInfo'}{Ordering} =~ /^\((.*?)\)$/,
 		    $fnt->{' CIDSystemInfo'}{Supplement};
-		if ( $Predefined_CMap_names && $name =~ /$Predefined_CMap_names/) {
+		if ($Predefined_CMap_names && $name =~ /$Predefined_CMap_names/) {
 		    for my $cid (keys %{$mfont->{' optgsub'}}) {
 			$tounicode->{$cid} = $mfont->{' cid2uni'}{$cid};
 		    }
@@ -1146,7 +1146,7 @@ for my $mfont (values %mfont) {
 	} else {
 	    $tounicode = $mfont->{' cid2uni'};
 	}
-	if (%$tounicode) {
+	if ($tounicode && %$tounicode) {
 	    $p->{ToUnicode} = make_cmap(
 		2,
 		"/".$fnt->{' CMapName'},
@@ -1156,8 +1156,7 @@ for my $mfont (values %mfont) {
 	}
     }
 
-    if ($fnt->{embed} || $embedall) {
-	my @cids = keys %{$mfont->{' cid2uni'}};
+    if (($fnt->{embed} || $embedall) && (my @cids = keys %{$mfont->{' cid2uni'}})) {
 	my $cff = $fnt->{' OTF'}->{'CFF '};
 	my $subset;
 	if ($options & PYFTSUBSET) {
