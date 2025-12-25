@@ -18,11 +18,9 @@ BIV?=	$B
 FAM?=	M G
 STY?=	R I B BI V IV BV BIV
 
-TEXTMAP?=	${GROFF_FONT}/devps/generate/text.map
-TEXTENC?=	${GROFF_FONT}/devps/text.enc
-DESC?=		${GROFF_FONT}/devps/DESC
+TEXTMAP?=	text.map
 
-OTFTODIT_OPTS?=	-e $(TEXTENC) -d $(DESC) -cS
+OTFTODIT_OPTS?=	-cS
 FILTERFONT_OPTS?=	-012k
 SUPP_SUFFIX?=	.s
 
@@ -43,8 +41,8 @@ all::	$1$2
 $1$2: $($1)-$($2).otf $($1)-$($2).afm otftodit filter-font
 	otftodit $(OTFTODIT_OPTS) $($(2)OPTS) $$< $$(word 2,$$^) $(TEXTMAP) $$@ 2> $$@.err
 	if grep -q "already mapped to groff name 'mc'" $$@.err; then \
-		sed '/^mu mc$$$$/s/^/#/' $(TEXTMAP) >text.map; \
-		$(MAKE) -f $(firstword $(MAKEFILE_LIST)) TEXTMAP=text.map clean-$1$2 $1$2; \
+		sed '/^mu mc$$$$/s/^/#/' ${GROFF_FONT}/devps/generate/text.map >text.map; \
+		$(MAKE) -f $(firstword $(MAKEFILE_LIST)) TEXTMAP=./text.map clean-$1$2 $1$2; \
 		rm -f text.map; \
 	else \
 		cat $$@.err; \

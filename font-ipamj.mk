@@ -15,13 +15,11 @@ IPAmjM?=	$F
 FOUNDRY?=
 EMBED?=
 
-TEXTMAP?=	${GROFF_FONT}/devps/generate/text.map
-TEXTENC?=	${GROFF_FONT}/devps/text.enc
-DESC?=		${GROFF_FONT}/devps/DESC
+TEXTMAP?=	text.map
 
 # don't specify -S (deletes unnamed glyphs)
 # to assign unnamed variation glyphs taken from mji.00602.xlsx.
-OTFTODIT_OPTS?=	-e $(TEXTENC) -d $(DESC) -c -w 290
+OTFTODIT_OPTS?=	-c -w 290
 
 VPATH+=		files
 
@@ -158,7 +156,7 @@ textmap-hyphen.pl=\
 # generates $F.map as text.map
 $F.map:	$F.afm mji.txt otftodit
 	otftodit ${OTFTODIT_OPTS} $< ${TEXTMAP} $F.font
-	(cat ${TEXTMAP}; \
+	(cat ${GROFF_FONT}/devps/generate/text.map; \
 	echo "# mji.00602.xlsx"; \
 	grep '^---' $F.font |cut -f5 | perl -e '${textmap+mijmap.pl}' mji.txt; \
 	) >$@
