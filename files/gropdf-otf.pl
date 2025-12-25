@@ -4266,11 +4266,11 @@ sub LoadFont
     $fnt{nospace} //= 0;
 
     # To see the effect of the USESPACE option in cidfont, comment out.
-    $fnt{nospace} = 1 if $fnt{cidfont}; # xxxxx
+    $fnt{nospace} = 1 if $fnt{cidfont};
 
     # and turn off the option USESPACE to suppress the message "using
     # nospace mode for ..."
-    $options &= ~USESPACE if $fnt{cidfont} && !$debug;
+    $options &= ~USESPACE if $fnt{cidfont};
 
     $fnt{nospace} = 1 if
 	!defined($fnt{NAM}->{space}->[PSNAME]) or
