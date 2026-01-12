@@ -28,7 +28,7 @@ use Encode qw(encode decode);
 use POSIX qw(mktime);
 use File::Spec;
 
-our $VERSION = "2025.12.21";
+our $VERSION = "2026.01.13";
 
 use List::Util qw(min max sum uniq);
 use File::Temp qw/tempfile/;
@@ -1156,7 +1156,7 @@ for my $mfont (values %mfont) {
 	}
     }
 
-    if (($fnt->{embed} || $embedall) && (my @cids = keys %{$mfont->{' cid2uni'}})) {
+    if (($fnt->{embed} || $embedall) && (my @cids = keys %{$mfont->{' cid2chf'}})) {
 	my $cff = $fnt->{' OTF'}->{'CFF '};
 	my $subset;
 	if ($options & PYFTSUBSET) {
@@ -4165,6 +4165,7 @@ sub LoadFont
     }
 
     if ($stg == 3) {
+	my $lastnm;
 	while (<$f>) {
 	    chomp;
 
@@ -4174,18 +4175,23 @@ sub LoadFont
 	    my (@r)=split;
 	    if ($r[1] eq '"')
 	    {
-		my $lastnm = $fnt{NO}->[-1];
 		my $chf = $fnt{NAM}->{$lastnm};
 		$fnt{NAM}->{$r[0]} = $chf;
 		next;
 	    }
 
 	    $r[3] = oct($r[3]) if substr($r[3],0,1) eq '0';
-	    $r[0] = 'space' if $r[3] == 32;
-
 	    #$r[0] = "u00".hex($r[3]) if $r[0] eq '---';
 	    if ($r[0] eq '---') {
-		if ($r[3] < 256) {
+		if ($fnt{cidfont}) {
+		    if ($r[3] == 1) {
+			$r[0] = 'space';
+		    } else {
+			$r[0] = sprintf "cid%05d", $r[4];
+		    }
+		} elsif ($r[3] == 32 && $fnt{encoding} eq 'text.enc') {
+		    $r[0] = 'space';
+		} elsif ($r[3] < 256) {
 		    $r[0] = sprintf "u%04X", $r[3];
 		} else {
 		    next;
@@ -4240,7 +4246,13 @@ sub LoadFont
 		$p[2]||0,	# RSB
 		$opt{gsub},	# OPTGSUB
 	    ];
+
+	    if (defined $fnt{NO}->[$r[3]] && $fnt{NO}->[$r[3]] ne $r[0]) {
+		Warn("Glyph \\N'$r[3]' has been rewritten from " .
+		     $fnt{NO}->[$r[3]] . " to " . $r[0]);
+	    }
 	    $fnt{NO}->[$r[3]]=$r[0];
+	    $lastnm = $r[0];
 	}
     }
 
@@ -5582,36 +5594,24 @@ sub AssignGlyph
     push(@{$fnt->{TRFCHAR}->[$chf->[MAJOR]]},$ch);
     $stream.="% Assign: $chf->[PSNAME] to $chf->[MAJOR]/$chf->[MINOR]\n" if $debug;
 
-    if (my $u16 = $chf->[UNICODE]) {
+    my $u;
+    if (defined (my $u16 = $chf->[UNICODE])) {
 	if ($prefer_utf16) {
-	    if ($fnt->{cidfont}) {
-		my $cid = $chf->[PSNAME];
-		if (defined $cid) {
-		    #$fnt->{' cid2nam'}{$cid} = $ch;
-		    $fnt->{' cid2chf'}{$cid} = (GetNAM($fnt, $ch))[0];
-		    $fnt->{' cid2uni'}{$cid} = $u16;
-		    $fnt->{' optgsub'}{$cid} = 1 if $chf->[OPTGSUB];
-		}
-	    } else {
-		#$fnt->{' 2nam'}[$chf->[MAJOR]]{$chf->[MINOR]} = $ch;
-		$fnt->{' 2uni'}[$chf->[MAJOR]]{$chf->[MINOR]} = $u16;
-	    }
+	    $u = $u16;
 	} else {
-	    my $u = decode "UTF16-BE", pack "n*", map hex($_), split '_', $u16;
-	    if ($fnt->{cidfont}) {
-		my $cid = $chf->[PSNAME];
-		if (defined $cid) {
-		    #$fnt->{' cid2nam'}{$cid} = $ch;
-		    $fnt->{' cid2chf'}{$cid} = (GetNAM($fnt, $ch))[0];
-		    $fnt->{' cid2uni'}{$cid} = $u;
-		    $fnt->{' optgsub'}{$cid} = 1 if $chf->[OPTGSUB];
-		}
-	    } else {
-		#$fnt->{' 2nam'}[$chf->[MAJOR]]{$chf->[MINOR]} = $ch;
-		$fnt->{' 2uni'}[$chf->[MAJOR]]{$chf->[MINOR]} = $u;
-	    }
+	    $u = decode "UTF16-BE", pack "n*", map hex($_), split '_', $u16;
 	}
+    }
 
+    if ($fnt->{cidfont}) {
+	my $cid = $chf->[PSNAME];
+	if (defined $cid) {
+	    $fnt->{' cid2chf'}{$cid} = (GetNAM($fnt, $ch))[0];
+	    $fnt->{' cid2uni'}{$cid} = $u if defined $u;
+	    $fnt->{' optgsub'}{$cid} = 1 if $chf->[OPTGSUB];
+	}
+    } else {
+	$fnt->{' 2uni'}[$chf->[MAJOR]]{$chf->[MINOR]} = $u if defined $u;
     }
 }
 
