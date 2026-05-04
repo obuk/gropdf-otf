@@ -18,6 +18,8 @@ B?=	Bold
 OTF=	$(addprefix ${HaranoAjiFonts.dir}/,$(addsuffix .otf,\
 		$(foreach fam,${FAM},$($(fam))-$R $($(fam))-$B)))
 
+OTFTODIT_OPTS?=	-c -e files/aj1.enc -N
+
 all::	${OTF}
 
 ${OTF}:	HaranoAjiFonts.git

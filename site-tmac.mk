@@ -7,7 +7,8 @@ VPATH+=		files
 all::	tmp/pdf.tmac tmp/ps.tmac
 
 FILES?=	tmp/man.local tmp/mdoc.local \
-		pdf.local tmp/ps.tmac tmp/ps.local
+	pdf.local tmp/ps.tmac tmp/ps.local \
+	tmp/ja.tmac
 
 ifeq "${GROFF_VERSION}" "1.23.0"
 FILES+=	tmp/an.tmac
@@ -28,14 +29,14 @@ install:: ${FILES}
 clean::
 	rm -rf tmp
 
-tmp/pdf.tmac:	pdf.tmac pdf.tmac.patch
+tmp/pdf.tmac:	pdf.tmac #pdf.tmac.patch
 	mkdir -p tmp
 	cp $< tmp
 	sed -E -e '/^[.]\\" Local Variables:/i\
 .\\" Load local modifications.\
 .do mso $(basename $(notdir $<)).local\
 .' $< >$@
-	patch -d tmp <$(word 2,$^)
+	#patch -d tmp <$(word 2,$^)
 
 tmp/ps.tmac:	ps.tmac
 	mkdir -p tmp
@@ -64,3 +65,7 @@ tmp/%.local:	%.local
 tmp/an.tmac:	an.tmac
 	mkdir -p tmp
 	sed -E -e '/^[.] *it 1 an-input-trap/s/it /itc /' $< >$@
+
+tmp/ja.tmac:	files/ja.tmac
+	mkdir -p tmp
+	cp $< $@

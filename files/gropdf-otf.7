@@ -18,20 +18,33 @@
 .ds MF B\" man page topic font
 .ds HF HB\" Default heading font
 .
+.ds CW-font CR
+.ds HR-font HR
+.de CW
+.  if \\n[.$] \{\
+.    ds cw-result \&\"
+.    if (\\n[.$] >= 3) .as cw-result \\$3\"
+.    as cw-result \f[\\*[\\$0-font]]\\$1\f[R]\"
+.    if (\\n[.$] >= 2) .as cw-result \\$2\"
+.    nop \\*[cw-result]
+.    rm cw-result
+.  \}
+..
+.als HR CW
 .
 .\" ------------------------------------------------------------------
 .SH NAME
 .\" ------------------------------------------------------------------
 .
-gropdf-otf \- gropdfのOTFサポート (メモ)
+gropdf-otf \- gropdf の OTF サポート (メモ)
 .
 .\" ------------------------------------------------------------------
 .SH SYNOPSYS
 .pdfhref M -N SYNOPSYS
 .\" ------------------------------------------------------------------
 .
-日本語のOTFを使用して
-groffで日本語のPDFを作成するubuntuのvagrant boxを作成します。
+日本語の OTF を使用して
+groff で日本語の PDF を作成する ubuntu の vagrant box を作成します。
 .EX
 git clone https://github.com/obuk/gropdf-otf.git
 cd gropdf-otf
@@ -41,14 +54,7 @@ cd /vagrant
 .sp .5
 # このメモやマンページをPDFで出力してみましょう。
 make gropdf-otf.7.pdf
-export GROFF_BIN_PATH=$HOME/bin
-zcat $(man -Lja -w 7 groff) | groff -Tpdf -ktp -mja -mandoc - > a.pdf
-env MANROFFOPT="-mja -dpaper=`paperconf`" man -Tpdf -Lja 7 groff >a.pdf
-.ig
-.\".sp .5
-.\"# マンページのPDFを作成します。groffのオプションはMANROFFOPTに指定します。
-.\"env MANROFFOPT="-dpaper=`paperconf` -P-yN" man -Tpdf -Lja 7 groff >a.pdf
-..
+man -Tpdf -Lja 7 groff >a.pdf
 .EE
 .
 .
@@ -56,59 +62,53 @@ env MANROFFOPT="-mja -dpaper=`paperconf`" man -Tpdf -Lja 7 groff >a.pdf
 .SH 日本語フォント
 .\" ------------------------------------------------------------------
 .
-日本語のOTFを明朝M\fIx\fP、ゴチックG\fIx\fP、等幅GM\fIx\fP のgroffフォント
+日本語の OTF を明朝
+.RI M x 、
+ゴチック
+.RI G x 、
+等幅
+.RI GM x
+の groff フォント
 .\" .MR groff_font 5
 としてインストールします。
-M、G、GMはファミリの名前、\fIx\fP はスタイルの名前です。
-太さ \(mu 形状 \(mu 書字方向の組み合せです。
+M、G、GM はファミリの名前です。
+.I x
+はスタイルの名前 (太さ \(mu 形状 \(mu 書字方向の組み合せ) で、
+次のとおりです。
 .in +2
-.nf
+.TS
+l l l l.
 R	中字・正体・横書	V	中字・正体・縦書
-.vs 15p
 I	中字・斜体・横書	IV	中字・斜体・縦書
 B	太字・正体・横書	BV	太字・正体・縦書
 BI	太字・斜体・横書	BIV	太字・斜体・縦書
-.vs
-.fi
+.TE
 .in
-.
-.\".PP
-.\"作成される日本語のgroffフォントは大きく、読み取りには時間がかかります。
-.\"(設定だけでも読み取られます。)
-.
-.\" Notoフォントから作成したMRは177,761行、
-.\" M\fIx\fP、G\fIx\fP、GM\fIx\fP を合計すると1,882,650行にもなります。
-.\" このフォントを使用して groff(7) のPDFを作成するとおよそ20秒もかかります。
-.
-.
-.ig
-.IP \u\s-2[0]\s0\d 4
-このリポジトリでは、日本語のOTFに
-.UR https://github.com/trueroad/HaranoAjiFonts
-原ノ味フォント
-.UE \c
-とNotoフォントを使用します。
-..
 .
 .\" ------------------------------------------------------------------
 .SS FOUNDRY の指定とフォントの埋め込み
 .\" ------------------------------------------------------------------
 .
 .MR gropdf 1
-はfoundryをサポートしています。これはgropdfのオプション \-y で
-同じフォントの異なるバージョンを選択する仕組みだと説明されていますが、
-別のフォントを選択するためにも使えそうです。
-.PP
-Notoフォントは、ubuntuでは標準の日本語フォントとしてインストールされ、
-fonts-confも設定されます。従って、fonts-confを使用するPDFビューアは、
-Notoフォントを選択すれば埋め込まなくても表示できる可能性があります。
-(PDFのファイルサイズを小さくできる可能性があります。)
+はオプション \-y でフォントを選択できます
+（本来は、同じフォントの異なるバージョンを選択する仕組み）。
+.
+たとえば、Noto フォントは、ubuntu では日本語フォントとしてインストールされ、
+fonts-conf も設定されます。
+従って、オプション \-y で Noto フォントを指定すれば、
+埋め込まなくても表示できる可能性があります。
+.
 .PP
 原ノ味フォントは、
-源ノフォントをAdobe-Japan1フォントに合わせて組み替えたフォントですが、
-縦書のグリフが調整されています。
-たとえば、\&\f[CR]\s+2〝シャヴァス探偵事務所〞\s0\fP\&を
-Notoフォントと原ノ味フォントの縦書で表示すると、
+基本的には源ノフォントを Adobe-Japan1 に組み替えたものですが、
+縦書のグリフが修正されています（詳細は、
+.UR https://github.com/trueroad/HaranoAjiFonts
+原ノ味フォントの説明
+.UE を
+参照のこと）。
+たとえば、
+.HR 〝シャヴァス探偵事務所〞
+の縦書は、
 .
 .sp .3
 .RS +2
@@ -116,53 +116,26 @@ Notoフォントと原ノ味フォントの縦書で表示すると、
 .rs
 .TS
 tab(;);
-l l.
-T{
-\f[X-GIV]〝シャヴァス探偵事務所〞\fP\u\s-2[1]\s0\d
-T};T{
-Notoフォント
-T}
-T{
-\f[GIV]〝シャヴァス探偵事務所〞\fP
-T};T{
-原ノ味フォント
-T}
+l l lw(40).
+\f[X-GIV]〝シャヴァス探偵事務所〞\fP;Noto フォント;\
+ダブルミニュートが正しく表示されませんが、
+\f[GIV]〝シャヴァス探偵事務所〞\fP;原ノ味フォント;\
+\h'3m'〃\h'5.5m'表示されます。
 .TE
 .vs
 .RE
-.sp .3
-ダブルミニュートの表示に違いがあることが分ります。
-縦書のスタイルはfont-featureにvrt2を指定しました。
-この結果を見ると、foundryでNotoフォントを選択した場合でも、
-縦書の字体は原ノ味フォントの方が良さそうです。
-.PD .2
-.IP \u\s-2[1]\s0\d 3
-この例はNotoフォントの縦書の斜体を X-GIV という名前でインストールしています。
-.EX
-make -f font-noto-cjk.mk FOUNDRY=X FAM=G STY=IV install
-.EE
-.ig
-ダブルミニュートの説明は、
-.UR https://note.morisawa.co.jp/n/n2a43f2c09931#5ee13dc5-b559-44d5-af22-8b830c3eafb9
-括弧の種類と使い分け
-.UE
-(モリサワ) の「横組・縦組で異なる字形」の使用例が分りやすいと思います。
-..
 .PP
-というわけで、次表のとおりインストールします。
+以上を考慮して、次のようにインストールします。
+（オプション \-yN で Noto フォントも試せます。)
 .
-.PP
-.\" .ne 11
 .RS +2
-.\" .vs (\n[.s]p * 150 / 100)u
 .rs
-.\".sp .3
-.vs 15p
 .TS
 tab(;);
 lb lb lb lb lb
 c c c l l.
 Foundry;Embed;Family;Styles;FontName
+.vs (\n[.s]p * 150 / 100)u
 _
 ;yes;M;R I B BI V IV BV BIV;HaranoAjiMincho-{Regular,Bold}
 ;yes;G;R I B BI V IV BV BIV;HaranoAjiGothic-{Regular,Bold}
@@ -172,28 +145,30 @@ N;no;M;R I B BI;NotoSerifCJKjp-{Regular,Bold}
 N;no;G;R I B BI;NotoSansCJKjp-{Regular,Bold}
 N;no;GM;R I B BI;NotoSansCJKjp-{Regular,Bold}
 .TE
-.\" .vs.bak
 .vs
 .RE
 .
-.PP
-原ノ味フォントでもフォントを埋め込まないようにすることはできますが、
-その場合、利用者が
+.ig
+.PD 0
+.IP \(bu 3
+原ノ味フォントで埋め込みを止める場合は、利用者が
 .UR https://www.freedesktop.org/software/fontconfig/fontconfig-user.html
 fonts-conf
 .UE
 を設定する必要があります。
 .\" 更に download ファイル中のパスの先頭に * を置きます。
 .
-.PP
-また、gropdfでCFFのサブセットフォントの作成にpyftsubsetを呼び出すと、
-man \-Tpdf では \f[CR]Fatal Python error: init_fs_encoding: ...\fP
-というメッセージが出力されます。
-とりあえず、
+.IP \(bu 3
+man \-Tpdf の中で gropdf が実行され、
+pyftsubset を使用してサブセットフォントを作成するとき、
+Fatal Python error: init_fs_encoding: ...
+というメッセージが出力されることがあります。
+対処として、
 .UR https://github.com/obuk/font-ttf
 Font::TTF
 .UE
-に同様の機能を追加して対処しました。XXXXX
+に同様の機能を追加しました。
+..
 .
 .ig end-of-experiment
 .\" ------------------------------------------------------------------
@@ -277,8 +252,9 @@ http://unicode.org/Public/MAPPINGS/OBSOLETE/EASTASIA/JIS/JIS0208.TXT
 .\" ------------------------------------------------------------------
 .
 実環境にインストールします。仮想環境より少し速くなります。
-寝ころんで紙を読む、綺麗な印刷物が好き、lprで印刷する、といった理由で実環境です。
-必要でない限りやらない方が安全だと思います。
+私は、lpr で印刷して、寝ころんで紙を読みます。
+そういうわけで実環境を使いますが、
+必要でない限りやらない方がいいと思います。
 .PP
 ここでは $HOME の下に groff, plenv, pyenv 等をインストールします。
 まず、Mk/default.mk でバージョンとインストール先を自分用に設定し、
@@ -288,12 +264,13 @@ cd gropdf-otf
 vi Mk/defaultl.mk
 .\"PERL_VERSION?=	5.42.0
 .\"PYTHON_VERSION?=	3.10.18
-GROFF_VERSION?=	1.23.0
+GROFF_VERSION?=	1.24.0
 GROFF_PREFIX?=	${HOME}
 MANDB_PREFIX?=	${HOME}
 :q
 vagrant destroy -f && vagrant up 
 .EE
+.LP
 そして、できれば壊れても諦めがつく実環境にインストールします。
 手順は以下のとおりです。
 .EX
@@ -338,8 +315,8 @@ export GROFF_BIN_PATH=$HOME/bin
 設定は $SITE_TMAC/ps.local にあります。
 結果と合わせて示します。
 .EX
-\&.\e\[dq] T\fIx\fPのスペシャルフォントに\
-M\fIx\fP(および M\fIx\fP.s)を設定します。
+\&.\e\[dq] T\fIx\fP のスペシャルフォントに \
+M\fIx\fP (および M\fIx\fP.s) を設定します。
 \&.my:fspecial TR  MR MI MB MBI
 .EE
 .sp -.5
@@ -370,11 +347,12 @@ top_and_bottom_lines(1)
 .sp -.3
 .PS
 .ft CR
-line right w1 "\ef[TB]\s[+20]\f[TB]ABC漢字かなカナ\fP\s[-20]\efP" invis
-line right w2 "\ef[MB]\s[+20]\f[MB]XYZ\fP\s[-20]\efP" invis
+line right w1 "\ef[TBI]\s[+20]\f[TBI]ABC漢字かなカナ\fP\s[-20]\efP" invis
+line right w2 "\ef[MBI]\s[+20]\f[MBI]XYZ\fP\s[-20]\efP" invis
 .ft
 top_and_bottom_lines(1)
 .PE
+.
 .ig
 .ft TR
 上の例は、T\fIx\fP のスペシャルフォントに
@@ -384,12 +362,12 @@ M\fIx\fP の倍率も設定します。
 ..
 .
 .PP
-.rs
+.ne 2
 .EX
-\&.\e\[dq]T\fIx\fPとH\fIx\fPの高さを揃えます。
+\&.\e\[dq]T\fIx\fP と H\fIx\fP の高さを揃えます。
 \&.my:fzoom    TR  HR HI HB HBI
 .sp .5
-\&.\e\[dq]H\fIx\fPのスペシャルフォントを設定します。
+\&.\e\[dq]H\fIx\fP のスペシャルフォントを設定します。
 \&.my:fspecial HR  GR GI GB GBI
 .EE
 .sp -.5
@@ -404,17 +382,18 @@ top_and_bottom_lines(1)
 .sp -.3
 .PS
 .ft CR
-line right w1 "\ef[HB]\s[+20]\f[HB]ABC漢字かなカナ\fP\s[-20]\efP" invis
-line right w2 "\ef[HB]\s[+20]\f[HB]XYZ\fP\s[-20]\efP" invis
+line right w1 "\ef[HBI]\s[+20]\f[HBI]ABC漢字かなカナ\fP\s[-20]\efP" invis
+line right w2 "\ef[GBI]\s[+20]\f[GBI]XYZ\fP\s[-20]\efP" invis
 .ft
 top_and_bottom_lines(1)
 .PE
+.
 .
 .PP
 .rs
 .EX
 .ne 3
-\&.\e\[dq] C\fIx\fP の高さをT\fIx\fPの800/1000倍にします。\
+\&.\e\[dq] C\fIx\fP の高さを T\fIx\fP の 800/1000倍にします。\
 (好みもありますが、コードの折り返しが減るように)
 \&.nr CR.zoom 800
 \&.my:fzoom    TR  CR CI CB CBI
@@ -440,8 +419,8 @@ top_and_bottom_lines(0.8)
 .sp -.3
 .PS
 .ft CR
-line right w1 "\ef[CB]\s[+20]\f[CB]ABC漢字かなカナ\fP\s[-20]\efP" invis
-line right w2 "\ef[GMB]\s[+20]\f[GMB]XYZ\fP\s[-20]\efP" invis
+line right w1 "\ef[CBI]\s[+20]\f[CBI]ABC漢字かなカナ\fP\s[-20]\efP" invis
+line right w2 "\ef[GMBI]\s[+20]\f[GMBI]XYZ\fP\s[-20]\efP" invis
 .ft
 top_and_bottom_lines(0.8)
 .PE
@@ -461,18 +440,19 @@ top_and_bottom_lines(0.8)
 .in +1m
 .PS
 .ft CR
-.my:fspecial2 TR MV
-line right w1 "\ef[MV]\s[+20]\f[MV]ABC漢字かなカナ\fP\s[-20]\efP" invis
+.my:fspecial2 TR MV MIV
+line right w1 "\ef[MV]\s[+20]\f[MV]漢字かなカナ\fP\s[-20]\efP" invis
 line right w2 "\ef[MR]\s[+20]\f[MR]いろは\fP\s[-20]\efP" invis
 .ft
 top_and_bottom_lines(1)
 .PE
+.
 .sp -.5
 .PS
 .ft CR
-.my:fspecial2 HR GV
-line right w1 "\ef[GV]\s[+20]\f[GV]ABC漢字かなカナ\fP\s[-20]\efP" invis
-line right w2 "\ef[GR]\s[+20]\f[GR]いろは\fP\s[-20]\efP" invis
+.my:fspecial2 HR GV GIV
+line right w1 "\ef[GIV]\s[+20]\f[GIV]漢字かなカナ\fP\s[-20]\efP" invis
+line right w2 "\ef[GI]\s[+20]\f[GI]いろは\fP\s[-20]\efP" invis
 .ft
 top_and_bottom_lines(1)
 .PE
@@ -527,8 +507,8 @@ koi8-u.7
 .
 縦書斜体の使用例として、
 NHK BS シネマ「昼下りの情事」から探偵事務所の看板とその字幕を示します
-(開始から5分くらいのところにあります)。
-珍しい字幕に驚き、つい質問したところ、以下のような回答が得られました。
+(開始から5分くらいのところ)。
+珍しい字幕だったので質問してみたところ、以下のような回答が得られました。
 .br
 .ne 7
 .mk
@@ -621,7 +601,10 @@ if (cjk_puncts) then {
 .mk here
 .sp (u;\n[there] - \n[here])
 .PP
-当時のNHKの字幕制作システムの制約に関して質問してみたところ、
+.ne 3
+当時の NHK の字幕制作システムに制約があったのではないかと思い、
+更に質問してみたところ、
+.
 .PP
 .ft HR
 字幕の「\c
@@ -640,20 +623,13 @@ if (cjk_puncts) then {
 .UE 」
 は、
 ダブルクォーテーションではなく、
-ダブルミニュートかと思われます。\"\Z'。'\u\s-2[1]\s0\d
+ダブルミニュートかと思われます。\"\Z'。'\u\s-2[2]\s0\d
 字幕を制作したのが20年以上前で、
 制作担当者に経緯や理由を確認できませんが、
 (以下略)
 .ft
 ということでした。
 .
-.ig
-.IP \u\s-2[1]\s0\d 3
-.UR https://note.morisawa.co.jp/n/n2a43f2c09931#5ee13dc5-b559-44d5-af22-8b830c3eafb9
-括弧の種類と使い分け
-.UE
-(モリサワ) の「横組・縦組で異なる字形」に使用例があります。
-..
 .
 .\" ------------------------------------------------------------------
 .SS 人名漢字
@@ -700,14 +676,30 @@ if (cjk_puncts) then {
 .ps
 .vs
 .RE
+.IP \(bu 3
 IPAmj明朝フォントは \-e オプションを指定しなくても埋め込まれます。
-IPAmj明朝は原ノ味フォントより細いため、並べると違いが分ります。
+.PD 0
+.IP \(bu
+IPAmj明朝は原ノ味フォントより細くデザインされているようです。
+違いが分るでしょうか。
+.PD
 .  \}
 .  el \{
-人名漢字のフォントIPAmj明朝はデフォルトで無効です。
+フォント IPAmj 明朝はデフォルトでは無効です。
+groff のコマンドラインに \-rfnIPAmjMR=1 を加えてください。
+.EX
+$ \c
+.B make GROFF_OPTIONS=-rfnIPAmjMR=1 gropdf-otf.7.pdf
+.EE
 .  \}
 .\}
 .el \{
-人名漢字のフォントIPAmj明朝が見つかりません。
+フォント IPAmj 明朝が見つかりません。
+人名漢字を表示するには
+IPAmj 明朝をインストールしてください。
+.EX
+$ \c
+.B make -f font-ipamj.mk clean install
+.EE
 .\}
 .

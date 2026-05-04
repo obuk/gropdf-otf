@@ -56,17 +56,10 @@ install::	all
 GROFF?=		env GROPDF_OPTIONS= GROFF_BIN_PATH=${GROFF_BIN} \
 			${GROFF_BIN}/groff $(GROFF_OPTIONS)
 GROFF+=		-Tpdf -dpaper=${PAPERSIZE} \
-			$(patsubst %,-P%,${GROPDF_OPTIONS} ${GROPDF_DEBUG})
+			$(patsubst %,-P%,-p${PAPERSIZE} ${GROPDF_OPTIONS} ${GROPDF_DEBUG})
 
-GROFF_OPTIONS?=
-#GROFF_OPTIONS+=	-rmy:debug-font=1
-#GROFF_OPTIONS+=	-rpp:debug=1
-#GROFF_OPTIONS+=	-rpp:hemsp-width=12
-
+GROFF_OPTIONS?=	-rU=1
 GROPDF_OPTIONS?=
-#GROPDF_OPTIONS+=	-e
-#GROPDF_OPTIONS+=	--opt=5
-
 GROPDF_DEBUG?=	-d --pdfver=1.4
 
 SAMPLE?=	groff gropdf groff.7 groff_font groff_char groff_out
@@ -93,6 +86,10 @@ L?=	ja
 	cat_page $* | ${GROFF} -Kutf8 -ktp $$([ -n "$L" ] && echo -m$L) \
 		-mandoc - > $@ \
 	&& cp $@ a.pdf
+
+gropdf-otf.7.pdf:	X-GIV
+X-GIV:
+	make -f font-noto-cjk.mk FOUNDRY=X FAM=G STY=IV clean install
 
 FORCE:
 

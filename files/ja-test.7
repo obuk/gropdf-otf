@@ -1,0 +1,182 @@
+.\"
+.\" ------------------------------------------------------------------
+.SS 回帰テスト
+.\" ------------------------------------------------------------------
+.
+.EX
+$ groff -rU=1 -rfn-v=1 -Tpdf -P-d -P--pdfver=1.4 -kept -mja -mandoc \e
+files/ja.7 files/ja-test.7 >a.pdf
+.EE
+.
+.
+.de test_newline_between
+.  nr ws (\\w'\\$1' + \\w'\\$2')
+.  nr wk \\w'\\$1\\$2'
+.  br
+.  ds cev \n[.ev]
+.  di @\\$0
+.  ev @\\$0
+.  evc \\*[cev]
+.  in 0
+.  nop \\$1
+.  nop \\$2
+.  br
+.  ev
+.  di
+.  nr wd \\n[dl]
+.  IP \(bu 3
+.\" .  nop dl=\\n[wd], wk=\\n[wk], ws=\\n[ws]
+.\" .  br
+.  nop 「\\$1」改行「\\$2」 \(->
+.  nop 「\c
+.  @\\$0
+.  nop 」
+.\" .  br
+.  ie (\\n[wk] = \\n[ws]) \{\
+.    nop :
+.    ie (\\n[wd] = \\n[ws]) .nop ok (スペースが削除された)
+.    el .nop not ok (スペースが削除されなかった)
+.  \}
+.  el \{\
+.    nop :
+.    ie (\\n[wd] = \\n[wk]) .nop ok (スペースが削除され、カーニングされた)
+.    el .nop not ok (スペースが削除されなかった)
+.  \}
+..
+.de test_space_between
+.  nr ws (\\w'\\$1 \\$2')
+.  br
+.  ds cev \n[.ev]
+.  di @\\$0
+.  ev @\\$0
+.  evc \\*[cev]
+.  in 0
+\\$1 \\$2
+.  br
+.  ev
+.  di
+.  nr wd \\n[dl]
+.  br
+.  IP \(bu 3
+.\" .  nop dl=\\n[wd], ws=\\n[ws]
+.\" .  br
+.  nop 「\\$1」空白「\\$2」 \(->
+.  nop 「\c
+.  @\\$0
+.  nop 」
+.\" .  br
+.  nop :
+.  ie (\\n[wd] = (\\n[ws])) .nop ok (スペースが削除されなかった)
+.  el .nop not ok (スペースが削除された)
+..
+.IP 1. 3
+.\" PROHIBITS_BREAK_BEFORE newline_or_space IS_INTERWORD_SPACE ...
+PBB newline (or space) IIS ...
+.br
+newline は行の折り返しとマクロの終わり、削除する。
+space は人の入力、削除しない。
+.RS +2
+.\" .ja 129
+.PD 0
+.test_newline_between アー ル
+.test_space_between アー ル
+.\" .ja
+.RE
+.
+.IP 2.
+.\"newline IS_INTERWORD_SPACE(1) IS_INTERWORD_SPACE(2) ...
+newline IIS(1) IIS(2) ...
+.br
+(2) が (1) とカーニングされるとき、(1) を越えて newline を探さない。
+.RS +2
+.test_newline_between プ リ
+.\".test_newline_between マクロは、書式記述言語を構成する 単語
+.\".test_newline_between 単語 です
+.RE
+.
+.de test_newline_between_w2j
+.  nr ws (\\w'\\$1 \\$2')
+.  nr wn (\\w'\\$1\\$2')
+.  br
+.  ds cev \n[.ev]
+.  di @\\$0
+.  ev @\\$0
+.  evc \\*[cev]
+.  in 0
+.\".ja 385
+.  nop \\$1
+.  nop \\$2
+.\".ja
+.  br
+.  ev
+.  di
+.  nr wd \\n[dl]
+.  IP \(bu 3
+.  nop 「\\$1」改行「\\$2」 \(->
+.  nop 「\c
+.  @\\$0
+.  nop 」
+.\" .  br
+.  nop :
+.  if (\\n[wd] = \\n[ws]) .nop ok (スペースが削除されなかった)
+.  if (\\n[wd] = \\n[wn]) .nop not ok (スペースが削除された, wd=\\n[wd], ws=\\n[ws])
+..
+.IP 3.
+.\"newline not IS_INTERWORD_SPACE newline_space IS_INTERWORD_SPACE ...
+newline not IIS newline (or space) IIS ...
+.RS +2
+.test_newline_between_w2j tbl プリプロセッサ
+.RE
+.ig
+「プ」が追加されたとき、遡ると、word_space_node と「l」が見付かる。
+「リ」が追加されたとき、遡ると、word_space_node と「フ゜」が見付かる。
+word_space が見付かるのが問題。
+..
+.
+.IP 4.
+マクロの前後の改行を取り除きます:
+.de test_macro
+.  ds cev \n[.ev]
+.  di @\\$0
+.  ev @\\$0
+.  evc \\*[cev]
+.  in 0
+.  if (\\n[.$]>=3) .nop \&\\$4
+.  \\$1 \\$2
+.  if (\\n[.$]>=3) .nop \&\\$3
+.  br
+.  ev
+.  di
+.@\\$0
+..
+.RS +2
+.IP \(bu 3
+.test_macro I 斜体 」 「
+\(em
+.test_macro I 単語 です。 マクロは、書式記述言語を構成する
+(田
+.I 田田
+田)
+.\".IP \(bu 3
+.\".test_macro B 太字 」 「
+.\"\(em
+.\".test_macro B 単語 です。 マクロは、書式記述言語を構成する
+.RE
+.
+.IP 5.
+等幅では、グリフは同じ幅になります。CR と TR で比べてみましょう。
+.RS +3
+.ja 0
+.MC 27n 2n
+.nf
+\f(CR\ew'\ef(CR田\efP\efP\fP = \w'\f(CR田\fP\fP'
+\f(CR\ew'\ef(CR。\efP\efP\fP = \w'\f(CR。\fP\fP'
+\f(CR\ew'\ef(CR、\efP\efP\fP = \w'\f(CR、\fP\fP'
+.2C
+\f(CR\ew'\ef(TR田\efP\efP\fP = \w'\f(TR田\fP\fP'
+\f(CR\ew'\ef(TR。\efP\efP\fP = \w'\f(TR。\fP\fP'
+\f(CR\ew'\ef(TR、\efP\efP\fP = \w'\f(TR、\fP\fP'
+.RC
+.ja
+.RE
+

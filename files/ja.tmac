@@ -1,0 +1,290 @@
+.\" Japanese localization for groff
+.
+.\" Copyright 2009-2020 Free Software Foundation, Inc.
+.\"
+.\" Written by Fumitoshi UKAI <ukai@debian.or.jp> and
+.\" Colin Watson <cjwatson@debian.org>
+.\"
+.\" This file is part of groff, the GNU roff typesetting system.
+.\"
+.\" groff is free software; you can redistribute it and/or modify it
+.\" under the terms of the GNU General Public License as published by
+.\" the Free Software Foundation, either version 3 of the License, or
+.\" (at your option) any later version.
+.\"
+.\" groff is distributed in the hope that it will be useful, but WITHOUT
+.\" ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+.\" or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+.\" License for more details.
+.\"
+.\" You should have received a copy of the GNU General Public License
+.\" along with this program.  If not, see
+.\" <http://www.gnu.org/licenses/>.
+.\"
+.\" Please send comments to groff@gnu.org.
+.
+.do nr *groff_ja_tmac_C \n[.cp]
+.cp 0
+.
+.
+.ds locale japanese\"
+.
+.\" A.1 Opening brackets (cl-01)
+.ds cl-01 \
+\[u3008] \# 〈	LEFT ANGLE BRACKET
+\[u300A] \# 《	LEFT DOUBLE ANGLE BRACKET
+\[u300C] \# 「	LEFT CORNER BRACKET
+\[u300E] \# 『	LEFT WHITE CORNER BRACKET
+\[u3010] \# 【	LEFT BLACK LENTICULAR BRACKET
+\[u3014] \# 〔	LEFT TORTOISE SHELL BRACKET
+\[u3016] \# 〖	LEFT WHITE LENTICULAR BRACKET
+\[u3018] \# 〘	LEFT WHITE TORTOISE SHELL BRACKET
+\[u301D] \# 〝	REVERSED DOUBLE PRIME QUOTATION MARK
+\[uFF08] \# （	Fullwidth LEFT PARENTHESIS
+\[uFF3B] \# ［	Fullwidth LEFT SQUARE BRACKET
+\[uFF5B] \# ｛	Fullwidth LEFT CURLY BRACKET
+\[uFF5F]\"# ｟	Fullwidth Left White Parenthesis
+.
+.ds cl-01p \
+(        \# （	0028	LEFT PARENTHESIS
+[        \# ［	005B	LEFT SQUARE BRACKET
+{        \# ｛	007B	LEFT CURLY BRACKET
+\[u2018] \# ‘	LEFT SINGLE QUOTATION MARK
+\[u201C] \# “	LEFT DOUBLE QUOTATION MARK
+\[u2985] \#  ⦅	LEFT WHITE PARENTHESIS
+\[u00AB]\"#  «	LEFT-POINTING DOUBLE ANGLE QUOTATION MARK
+.
+.\" A.2 Closing brackets (cl-02)
+.ds cl-02 \
+\[u3009] \# 〉	RIGHT ANGLE BRACKET
+\[u300B] \# 》	RIGHT DOUBLE ANGLE BRACKET
+\[u300D] \# 」	RIGHT CORNER BRACKET
+\[u300F] \# 』	RIGHT WHITE CORNER BRACKET
+\[u3011] \# 】	RIGHT BLACK LENTICULAR BRACKET
+\[u3015] \# 〕	RIGHT TORTOISE SHELL BRACKET
+\[u3017] \# 〗	RIGHT WHITE LENTICULAR BRACKET
+\[u3019] \# 〙	RIGHT WHITE TORTOISE SHELL BRACKET
+\[u301E] \# 〞	DOUBLE PRIME QUOTATION MARK
+\[u301F] \# 〟	LOW DOUBLE PRIME QUOTATION MARK
+\[uFF09] \# ）	Fullwidth RIGHT PARENTHESIS
+\[uFF3D] \# ］	Fullwidth RIGHT SQUARE BRACKET
+\[uFF5D] \# ｝	Fullwidth RIGHT CURLY BRACKET
+\[uFF60]\"# ｠	Fullwidth Right White Parenthesis
+.
+.ds cl-02p \
+)        \# ）	0029	RIGHT PARENTHESIS
+]        \# ］	005D	RIGHT SQUARE BRACKET
+}        \# ｝	007D	RIGHT CURLY BRACKET
+\[u2019] \# ’	RIGHT SINGLE QUOTATION MARK
+\[u201D] \# ”	RIGHT DOUBLE QUOTATION MARK
+\[u2986] \# ⦆	RIGHT WHITE PARENTHESIS
+\[u00BB]\"# »	RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK
+.
+.\" A.3 Hyphens (cl-03)
+.ds cl-03 \
+\[u301C] \# 〜	WAVE DASH
+\[u30A0]\"# ゠	KATAKANA-HIRAGANA DOUBLE HYPHEN
+.
+.ds cl-03p \
+\[u2010] \# ‐	HYPHEN
+\[u2013]\"# –	EN DASH
+.
+.\" A.4 Dividing punctuation marks (cl-04)
+.ds cl-04 \
+\[u203C] \# ‼	DOUBLE EXCLAMATION MARK
+\[u2047] \# ⁇	DOUBLE QUESTION MARK
+\[u2048] \# ⁈	QUESTION EXCLAMATION MARK
+\[u2049]\"# ⁉	EXCLAMATION QUESTION MARK
+.
+.ds cl-04p \
+!        \# ！	0021	EXCLAMATION MARK
+?        \# ？	003F	QUESTION MARK
+\[uFF01] \# ！	EXCLAMATION MARK
+\[uFF1F]\"# ？	QUESTION MARK
+.
+.\" A.5 Middle dots (cl-05)
+.ds cl-05 \
+\[u30FB]\"# ・	KATAKANA MIDDLE DOT
+.
+.ds cl-05x \
+:        \# ：	003A	COLON
+\[uFF1A] \#
+;        \# ；	003B	SEMICOLON
+\[uFF1B]\"#
+.
+.\" A.6 Full stops (cl-06)
+.ds cl-06 \
+\[u3002] \# 。	IDEOGRAPHIC FULL STOP
+\[uFF0E]\"# ．	FULL STOP
+.
+.ds cl-06p \
+.        \"# ．	002E	FULL STOP
+.
+.\" A.7 Commas (cl-07)
+.ds cl-07 \
+\[u3001] \# 、	IDEOGRAPHIC COMMA
+\[uFF0C]\"# ，	COMMA
+.
+.ds cl-07p \
+,       \"# ，	002C	COMMA
+.
+.\" A.8 Inseparable characters (cl-08)
+.ds cl-08 \
+\[u2014] \# —	EM DASH
+\[u2025] \# ‥	TWO DOT LEADER
+\[u2026] \# …	HORIZONTAL ELLIPSIS
+\[u3033] \# 〳	VERTICAL KANA REPEAT MARK UPPER HALF
+\[u3034] \# 〴	VERTICAL KANA REPEAT WITH VOICED SOUND MARK UPPER HALF
+\[u3035]\"# 〵	VERTICAL KANA REPEAT MARK LOWER HALF
+.
+.\" A.9 Iteration marks (cl-09)
+.ds cl-09 \
+\[u3003] \# 〃	DITTO MARK
+\[u3005] \# 々	IDEOGRAPHIC ITERATION MARK
+\[u303B] \# 〻	VERTICAL IDEOGRAPHIC ITERATION MARK
+\[u309D] \# ゝ	HIRAGANA ITERATION MARK
+\[u309E] \# ゞ	HIRAGANA VOICED ITERATION MARK
+\[u30FD] \# ヽ	KATAKANA ITERATION MARK
+\[u30FE]\"# ヾ	KATAKANA VOICED ITERATION MARK
+.
+.\" A.10 Prolonged sound mark (cl-10)
+.ds cl-10 \
+\[u30FC]\"# ー	KATAKANA-HIRAGANA PROLONGED SOUND MARK
+.
+.\" A.11 Small kana (cl-11)
+.ds cl-11 \
+\[u3041] \# ぁ	HIRAGANA LETTER SMALL A
+\[u3043] \# ぃ	HIRAGANA LETTER SMALL I
+\[u3045] \# ぅ	HIRAGANA LETTER SMALL U
+\[u3047] \# ぇ	HIRAGANA LETTER SMALL E
+\[u3049] \# ぉ	HIRAGANA LETTER SMALL O
+\[u3063] \# っ	HIRAGANA LETTER SMALL TU
+\[u3083] \# ゃ	HIRAGANA LETTER SMALL YA
+\[u3085] \# ゅ	HIRAGANA LETTER SMALL YU
+\[u3087] \# ょ	HIRAGANA LETTER SMALL YO
+\[u308E] \# ゎ	HIRAGANA LETTER SMALL WA
+\[u3095] \# ゕ	HIRAGANA LETTER SMALL KA
+\[u3096] \# ゖ	HIRAGANA LETTER SMALL KE
+\[u30A1] \# ァ	KATAKANA LETTER SMALL A
+\[u30A3] \# ィ	KATAKANA LETTER SMALL I
+\[u30A5] \# ゥ	KATAKANA LETTER SMALL U
+\[u30A7] \# ェ	KATAKANA LETTER SMALL E
+\[u30A9] \# ォ	KATAKANA LETTER SMALL O
+\[u30C3] \# ッ	KATAKANA LETTER SMALL TU
+\[u30E3] \# ャ	KATAKANA LETTER SMALL YA
+\[u30E5] \# ュ	KATAKANA LETTER SMALL YU
+\[u30E7] \# ョ	KATAKANA LETTER SMALL YO
+\[u30EE] \# ヮ	KATAKANA LETTER SMALL WA
+\[u30F5] \# ヵ	KATAKANA LETTER SMALL KA
+\[u30F6] \# ヶ	KATAKANA LETTER SMALL KE
+\[u31F0] \# ㇰ	KATAKANA LETTER SMALL KU
+\[u31F1] \# ㇱ	KATAKANA LETTER SMALL SI
+\[u31F2] \# ㇲ	KATAKANA LETTER SMALL SU
+\[u31F3] \# ㇳ	KATAKANA LETTER SMALL TO
+\[u31F4] \# ㇴ	KATAKANA LETTER SMALL NU
+\[u31F5] \# ㇵ	KATAKANA LETTER SMALL HA
+\[u31F6] \# ㇶ	KATAKANA LETTER SMALL HI
+\[u31F7] \# ㇷ	KATAKANA LETTER SMALL HU
+\[u31F8] \# ㇸ	KATAKANA LETTER SMALL HE
+\[u31F9] \# ㇹ	KATAKANA LETTER SMALL HO
+\[u31FA] \# ㇺ	KATAKANA LETTER SMALL MU
+\[u31FB] \# ㇻ	KATAKANA LETTER SMALL RA
+\[u31FC] \# ㇼ	KATAKANA LETTER SMALL RI
+\[u31FD] \# ㇽ	KATAKANA LETTER SMALL RU
+\[u31FE] \# ㇾ	KATAKANA LETTER SMALL RE
+\[u31FF]\"# ㇿ	KATAKANA LETTER SMALL RO
+.
+.if 0 .class [CJKprepunct] \
+  , : ; > } \
+  \[u3001] \[u3002] \[uFF0C] \[uFF0E] \[u30FB] \[uFF1A] \[uFF1B] \[uFF1F] \
+  \[uFF01] \[uFF09] \[u3015] \[uFF3D] \[uFF5D] \[u300D] \[u300F] \[u3011] \
+  \[u3041] \[u3043] \[u3045] \[u3047] \[u3049] \[u3063] \[u3083] \[u3085] \
+  \[u3087] \[u30FC] \
+  \[u30A1] \[u30A3] \[u30A5] \[u30A7] \[u30A9] \[u30C3] \[u30E3] \[u30E5] \
+  \[u30E7]
+.class [CJKprepunct] \
+  \*[cl-02] \*[cl-02p] \
+  \*[cl-03] \*[cl-03p] \
+  \*[cl-04] \*[cl-04p] \
+  \*[cl-05] \
+  \*[cl-06] \*[cl-06p] \
+  \*[cl-07] \*[cl-07p] \
+  \*[cl-08] \
+  \*[cl-09] \
+  \*[cl-10] \
+  \*[cl-11]
+.
+.if 0 .class [CJKpostpunct] \
+  \[uFF08] \[u3014] \[uFF3B] \[uFF5B] \[u300C] \[u300E] \[u3010]
+.class [CJKpostpunct] \
+  \*[cl-01] \*[cl-01p]
+.
+.class [CJKhasSpA] \
+  \*[cl-02] \
+  \*[cl-05] \
+  \*[cl-06] \
+  \*[cl-07]
+.class [CJKhasSpB] \
+  \*[cl-01] \
+  \*[cl-05]
+.
+.\" Hiragana, Katakana, and Kanji glyphs.
+.if 0 .class [CJKnormal] \
+  \[u3041]-\[u3096] \[u30A0]-\[u30FF] \[u4E00]-\[u9FFF]
+.class [CJKnormal] \
+  \[u3000]-\[u303F] \# CJK Symbols and Punctuation
+  \[u3041]-\[u3096] \# Hiragana
+  \[u30A0]-\[u30FF] \# Katakana
+  \[u4E00]-\[u9FFF] \# CJK Unified Ideographs
+  \[uF900]-\[uFAFF] \# CJK Compatibility Ideographs
+  \[uFF00]-\[uFFEF]\"# Halfwidth and Fullwidth Forms
+.
+.cflags 128 \C'[CJKprepunct]'
+.cflags 256 \C'[CJKpostpunct]'
+.cflags 512 \C'[CJKnormal]'
+.cflags 1024 \C'[CJKhasSpA]'
+.cflags 2048 \C'[CJKhasSpB]'
+.
+.rm cl-01 cl-01p
+.rm cl-02 cl-02p
+.rm cl-03 cl-02p
+.rm cl-04 cl-04p
+.rm cl-05 cl-05x
+.rm cl-06 cl-06p
+.rm cl-07 cl-07p
+.rm cl-08
+.rm cl-09
+.rm cl-10
+.rm cl-11
+.
+.\" Japanese hyphenation (disabled)
+.nr \*[locale]*hyphenation-mode-base 0
+.nr \*[locale]*hyphenation-mode-trap 0
+.
+.hydefault 0
+.hy
+.
+.\" Check (heuristically) for output device coverage of Japanese script.
+.if !r \*[locale]*device-checked-for-glyph-coverage \{\
+.  if !c \[u65E5] \{\
+.    tm \n[.F]: warning: font \n[.fn] may lack coverage of \
+Japanese script
+.    nr \*[locale]*device-checked-for-glyph-coverage 1
+.  \}
+.\}
+.
+.\" Enable expanded interpretation of cflags.
+.\".ja 1    \" JA_ENABLE
+.\".ja 2    \" JA_NOZWSP
+.\".ja 128  \" JA_DEBUG
+.\".ja 0    \" turn off the JA something
+.ja 1
+.
+.cp \n[*groff_ja_tmac_C]
+.do rr *groff_ja_tmac_C
+.
+.\" Local Variables:
+.\" mode: nroff
+.\" fill-column: 72
+.\" End:
+.\" vim: set filetype=groff textwidth=72:

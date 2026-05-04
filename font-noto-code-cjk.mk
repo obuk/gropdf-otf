@@ -3,6 +3,6 @@ GM?=	NotoSansCJKjp
 
 STY=	R I B BI
 
-ROPTS=	-F palt="" -F kern="" -F liga=""
+ROPTS=
 
 include font-noto-cjk.mk

@@ -13,6 +13,9 @@ filter-font:	files/filter-font.pl JIS0208.TXT joyo-kanji-code-u.csv \
 		Unicode-Normalize.cpanm Encode.cpanm Getopt-Long.cpanm plenv
 	install-pl $< $@
 
+merge-download-files: files/merge-download-files.pl Getopt-Long.cpanm plenv
+	install-pl $< $@
+
 JIS0208.TXT:
 	[ -f $@ ] || curl -O https://unicode.org/Public/MAPPINGS/OBSOLETE/EASTASIA/JIS/$@
 

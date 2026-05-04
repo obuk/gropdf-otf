@@ -22,27 +22,35 @@ groff.configure:	groff.git automake.pkg autoconf.pkg libtool.pkg		\
 	cd $(groff.dir); \
 	git reset --hard; \
 	git checkout master; \
-	echo git pull origin master; \
-	[ ! -z "$(GROFF_TAG)" ] && git checkout $(GROFF_TAG); \
+	echo git pull; \
+	[ ! -z "$(GROFF_VERSION)" ] && git checkout $(GROFF_VERSION); \
 	[ -f ./bootstrap ] && ./bootstrap; \
 	./configure --prefix=${GROFF_PREFIX}
 	touch $@
 
 # https://ja.wikipedia.org/w/index.php?search=CJK+Compatibility+Ideographs
-patch_cjk_compat=	perl -i.bak -lne \
+patch-cjk_compat=	perl -i.bak -lne \
 	'next if /^\s*(\{\s*)?"F[9A][0-9A-F]{2}|2F[89A][0-9A-F]{2}",/; print'
 
-groff.patch:	groff.configure
+groff.patch:	patch-cjk_compat.log \
+		patch-troff-ja.log
+
+patch-cjk_compat.log:	groff.configure
 	cd $(groff.dir); \
-	$(patch_cjk_compat) \
+	$(patch-cjk_compat) \
 		src/utils/afmtodit/afmtodit.tables \
 		src/libs/libgroff/uniuni.cpp
 	touch $@
 
+O=	$@.tmp && mv $@.tmp $@
+patch-troff-ja.log:	files/troff-ja.patch groff.configure
+	patch -p1 -d $(groff.dir) <$< >$O 2>&1
+
 clean::
 	-[ -d $(groff.dir) ] && $(MAKE) -C $(groff.dir) $@
 	rm -f groff.configure
-	rm -f groff.patch
+	rm -f patch-cjk_compat.log
+	rm -f patch-troff-ja.log
 	rm -f groff.all
 
 install:: all

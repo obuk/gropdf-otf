@@ -5193,16 +5193,34 @@ our ($opt_a, $opt_c, $opt_d, $opt_e, $opt_f, $opt_i, $opt_k,
 
 use Encode;
 use Getopt::Long qw(:config gnu_getopt);
+my @ot_feature;
 GetOptions( "a=s", "c", "d=s", "e=s", "f=s", "i=s", "k", "m", "n",
   "o=s", "s", "v", "w=i" => \$space_width, "x", "version" => \$opt_v,
-  "F=s" => \ my %ot_feature, "V" => \ my $opt_vertical, "S" => \ my $skip_unnamed,
+  "F=s" => \@ot_feature,
+  "V" => \ my $opt_vertical,
+  "S" => \ my $skip_unnamed, "N" => \ my $opt_Ncid,
   "help" => \$want_help
 );
+
+my %ot_feature;
+for (@ot_feature) {
+    my ($k, $v) = split /=/;
+    if (defined $v) {
+	my @v = split /,/, $v;
+	@v = (undef, undef, $v[0]) if @v == 1;
+	$v[0] ||= '*';
+	$v[1] ||= '*';
+	$v[2] ||= $k;
+	$ot_feature{$k} = join ',', @v;
+    } else {
+	$ot_feature{$k} = join ',', '*', '*', $k;
+    }
+}
+
 #use feature 'say';
 use Data::Dumper qw/Dumper/;
 $Data::Dumper::Indent = 1;
 $Data::Dumper::Terse = 1;
-#use lib qw(/vagrant/font-ttf/lib);
 
 my $afmtodit_version = "GNU afmtodit (groff) version 1.23.0";
 
@@ -5383,6 +5401,7 @@ my %subscript_correction;
 # my %ligs
 my %ligatures;
 my (@encoding, %in_encoding);
+my %n2c;
 my (%width, %height, %depth);
 my (%left_side_bearing, %right_side_bearing);
 
@@ -5499,7 +5518,8 @@ while (<AFM>) {
 		    if (my $subst = find_gsub($gid, "gsub")) {
 			$gid = $subst;
 			$cid = $gid2cid->[$gid];
-			$n = $cid;
+			$n2c{$cid} = $c if $c != -1;
+			$c = -1;
 		    }
 		    my $width = $otf->{'hmtx'}{'advance'}[$gid] // 1000;
 		    if ($gpos) {
@@ -5513,9 +5533,23 @@ while (<AFM>) {
 			    $height += $_ if defined;
 			}
 		    }
+		    my ($o_llx, $o_lly) = ($llx, $lly);
+		    my ($o_urx, $o_ury) = ($urx, $ury);
+		    if ($opt_a) {
+			my $ta = 0;
+			my $tb = $opt_a / 180 * pi();
+			my $M = [ 1, 0, sin($tb) / cos($tb), 1, 0, 0 ];
+			($llx, $lly) = mmul([$llx, $lly], $M);
+			($urx, $ury) = mmul([$urx, $ury], $M);
+		    }
 		    if ($opt_vertical) {
-			my ($px, $py) = rotate(90, $llx, $lly);
-			my ($qx, $qy) = rotate(90, $urx, $ury);
+			#my $t = 90 / 180 * pi();
+			#my $M = [ cos($t), sin($t), -sin($t), cos($t), 0, 0 ];
+			my $M = [ 0, 1, -1, 0, 0, 0 ];
+			my ($px, $py) = mmul([$llx, $lly], $M);
+			my ($qx, $qy) = mmul([$urx, $ury], $M);
+			$px += 1000 + $descender; $py += $descender;
+			$qx += 1000 + $descender; $qy += $descender;
 			($llx, $lly) = (min($px, $qx), min($py, $qy));
 			($urx, $ury) = (max($px, $qx), max($py, $qy));
 			$w = $height if defined $height;
@@ -5523,8 +5557,16 @@ while (<AFM>) {
 			$w = $width if defined $width;
 		    }
 		}
-		if (!$opt_e && $c != -1) {
-		    $encoding[$c] = $n;
+		#if (!$opt_e && $c != -1) {
+		if (!$opt_e && $c != -1 || $c >= 256) {
+		    if ($opt_Ncid) {
+			if (defined $encoding[$n] && $encoding[$n] ne $n) {
+			    say STDERR "overwriting \$encoding[$n]: $encoding[$n] => $n";
+			}
+			$encoding[$n] = $n;
+		    } else {
+			$encoding[$c] = $n;
+		    }
 		    $in_encoding{$n} = 1;
 		}
 		$width{$n} = $w;
@@ -5540,6 +5582,24 @@ while (<AFM>) {
     }
 }
 close(AFM);
+
+for my $n (sort { $a <=> $b } keys %n2c) {
+    my $c = $n2c{$n};
+    if (!$opt_e && $c != -1 || $c >= 256) {
+	if ($opt_Ncid) {
+	    if (defined $encoding[$n] && $encoding[$n] ne $n) {
+		say STDERR "overwriting \$encoding[$n]: $encoding[$n] => $n";
+	    }
+	    $encoding[$n] = $n;
+	} else {
+	    if (defined $encoding[$c] && $encoding[$c] ne $n) {
+		say STDERR "overwriting \$encoding[$c]: $encoding[$c] => $n";
+	    }
+	    $encoding[$c] = $n;
+	}
+	$in_encoding{$n} = 1;
+    }
+}
 
 if ($otf) {
     $psname     //= get_name($otf, 6) // $otf->{'CFF '}->TopDICT->{FontName};
@@ -5559,16 +5619,16 @@ sub get_name {
     $otf->{name}{strings}[$number][$platform_id][$encoding_id]{$language_id};
 }
 
-
-sub rotate {
-    my ($angle, $x, $y) = @_;
-    my $th = $angle * 3.14159265358979323846/180.0;
-    ($x, $y) = map { int($_ + 0.5) } ($x * cos($th) - $y * sin($th), $x * sin($th) + $y * cos($th));
-    die "rotate: \$descender is not defined\n" unless defined $descender;
-    $x += 1000 + $descender; $y += $descender;
-    ($x, $y);
+sub pi {
+    3.14159265358979323846;
 }
 
+sub mmul {
+    my ($x, $y) = @{$_[0]};
+    my ($a, $b, $c, $d, $e, $f) = @{$_[1]};
+    ($a * $x + $c * $y + $e,
+     $b * $x + $d * $y + $f);
+}
 
 sub min {
     my $min = shift;
@@ -5633,7 +5693,15 @@ if ($opt_e) {
 		    $field[0] = $cid;
 		}
 		next unless defined $width{$field[0]}; # xxxxx
-		$encoding[$field[1]] = $field[0];
+		if ($opt_Ncid) {
+		    my $n = $field[0];
+		    if (defined $encoding[$n] && $encoding[$n] ne $n) {
+			say STDERR "overwriting \$encoding[$n]: $encoding[$n] => $n";
+		    }
+		    $encoding[$field[0]] = $field[0];
+		} else {
+		    $encoding[$field[1]] = $field[0];
+		}
 		$in_encoding{$field[0]} = 1;
 	    }
 	}
@@ -5646,6 +5714,9 @@ sub glyphname_to_cid {
     my $name = shift;
     my $uv = $AGL_to_unicode{$name};
     unless (defined $uv) {
+	if ($name =~ /^cid0*(\d+)$/) {
+	    return $1;
+	}
 	warn "$prog: $name is not defined in \%AGL_to_unicode.\n"
 	    if $debug;
 	return undef;
@@ -5798,7 +5869,16 @@ if (!$opt_x) {
     foreach my $ch (sort $cmp keys %width) {
 	# add unencoded characters
 	if (!$in_encoding{$ch}) {
-	    $encoding[$i] = $ch;
+	    if ($opt_Ncid) {
+		my $n = $ch;
+		if (defined $encoding[$n] && $encoding[$n] ne $n) {
+		    say STDERR "overwriting \$encoding[$n]: $encoding[$n] => $n";
+		}
+		$encoding[$ch] = $ch;
+	    } else {
+		$encoding[$i] = $ch;
+	    }
+	    $in_encoding{$ch} = 1;
 	    $i++;
 	}
 	if ($nmap{$ch}) {
@@ -5955,7 +6035,7 @@ if (!$opt_x) {
 
 
 if ($iscidfont) {
-    my $option = $ot_feature{liga} // '*,*,liga';
+    my $option = $ot_feature{liga}; # // '*,*,liga';
     my $liga = gsub($otf, grep defined, ot_feature($otf, 'GSUB', $option));
     for my $k (keys %$liga) {
         my @list;
@@ -6030,7 +6110,7 @@ if ($otf) {
 }
 print("special\n") if $opt_s;
 print("vertical\n") if $opt_vertical;
-printf("slant %g\n", $italic_angle) if $italic_angle != 0;
+printf("slant %g\n", map { $opt_vertical ? -$_ : $_ } $italic_angle) if $italic_angle != 0;
 #printf("spacewidth %d\n", conv($width{"space"})) if defined $width{"space"};
 printf("spacewidth %d\n", $sw) if $sw;
 
@@ -6049,7 +6129,7 @@ if (!$opt_n && %ligatures) {
 }
 
 if ($iscidfont) {
-    my $option = $ot_feature{kern} // (!$opt_vertical ? '*,*,kern' : '*,*,vkrn');
+    my $option = $ot_feature{kern};# // '*,*,kern';
     if (my $kern = gpos($otf, grep defined, ot_feature($otf, 'GPOS', $option))) {
         my @kern;
         while (my ($k, $v) = each %$kern) {
@@ -6125,7 +6205,7 @@ else {
 
 $italic_angle = $italic_angle*3.14159265358979323846/180.0;
 $slant = sin($italic_angle)/cos($italic_angle);
-$slant = 0 if $slant < 0 && !$opt_vertical;
+$slant = 0 if $slant < 0;
 
 print("\n");
 print("charset\n");
@@ -6155,10 +6235,7 @@ for (my $i = 0; $i <= $#encoding; $i++) {
 	my $subscript_correction = 0;
 	if (defined $opt_i) {
 	    $italic_correction = $right_side_bearing{$ch} + $opt_i;
-	    #$italic_correction = 0 if $italic_correction < 0;
-	    if (!$opt_vertical) { # xxxxx
-		$italic_correction = 0 if $italic_correction < 0;
-	    }
+	    $italic_correction = 0 if $italic_correction < 0;
 	    $subscript_correction = $slant * $xheight * .8;
 	    $subscript_correction = $italic_correction if
 		$subscript_correction > $italic_correction;
@@ -6175,6 +6252,10 @@ for (my $i = 0; $i <= $#encoding; $i++) {
 	}
 	if (defined $subscript_correction{$ch}) {
 	    $subscript_correction = $subscript_correction{$ch};
+	}
+	if ($opt_vertical) {
+	    ($italic_correction, $left_math_fit) =
+		($left_math_fit, $italic_correction);
 	}
 	if ($subscript_correction != 0) {
 	    printf(",%d,%d", conv($h), conv($d));
@@ -6423,12 +6504,6 @@ sub ot_feature {
 
 # Local Variables:
 # fill-column: 72
-# tab-width: 8
-# indent-tabs-mode: t
 # mode: CPerl
-# cperl-indent-level: 4
-# cperl-continued-statement-offset: 4
-# cperl-close-paren-offset: -4
-# cperl-indent-parens-as-block: t
 # End:
 # vim: set cindent noexpandtab shiftwidth=2 softtabstop=2 textwidth=72:

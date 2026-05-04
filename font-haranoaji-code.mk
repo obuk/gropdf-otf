@@ -3,6 +3,6 @@ GM?=	HaranoAjiGothic
 
 STY=	R I B BI
 
-ROPTS=	-F palt="" -F kern="" -F liga=""
+ROPTS=
 
 include font-haranoaji.mk

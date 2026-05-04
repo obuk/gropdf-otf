@@ -1,0 +1,928 @@
+diff --git a/src/roff/troff/charinfo.h b/src/roff/troff/charinfo.h
+index 1a2b8bc9c..ec6627af8 100644
+--- a/src/roff/troff/charinfo.h
++++ b/src/roff/troff/charinfo.h
+@@ -61,7 +61,10 @@ public:
+     PROHIBITS_BREAK_BEFORE = 0x80,
+     PROHIBITS_BREAK_AFTER = 0x100,
+     IS_INTERWORD_SPACE = 0x200,
+-    CFLAGS_MAX = 0x2FF
++    //CFLAGS_MAX = 0x2FF
++    HAS_SPACE_AFTER = 0x400,
++    HAS_SPACE_BEFORE = 0x800,
++    CFLAGS_MAX = 0xFFF
+   };
+   //
+   // C++11: Use `enum : unsigned char`.
+@@ -85,6 +88,8 @@ public:
+   bool prohibits_break_before();
+   bool prohibits_break_after();
+   bool is_interword_space();
++  bool has_space_after();
++  bool has_space_before();
+   unsigned char get_hyphenation_code();
+   unsigned char get_ascii_code();
+   unsigned char get_asciify_code();
+@@ -198,6 +203,20 @@ inline bool charinfo::is_interword_space()
+   return (flags & IS_INTERWORD_SPACE);
+ }
+ 
++inline bool charinfo::has_space_after()
++{
++  if (using_character_classes)
++    ::get_flags();
++  return (flags & HAS_SPACE_AFTER);
++}
++
++inline bool charinfo::has_space_before()
++{
++  if (using_character_classes)
++    ::get_flags();
++  return (flags & HAS_SPACE_BEFORE);
++}
++
+ inline bool charinfo::is_numbered()
+ {
+   return (number >= 0);
+diff --git a/src/roff/troff/env.cpp b/src/roff/troff/env.cpp
+index 90880c3fe..81dfc0b4e 100644
+--- a/src/roff/troff/env.cpp
++++ b/src/roff/troff/env.cpp
+@@ -400,6 +400,52 @@ void environment::add_char(charinfo *ci)
+ #endif
+ }
+ 
++void ja_flags_request()
++{
++  if (!has_arg()) {
++    curenv->ja_flags = curenv->prev_ja_flags;
++  } else {
++    int n;
++    if (read_integer(&n)) {
++      if (n < 0)
++        warning(WARN_RANGE, "ignoring negative japanese flags: '%1'", n);
++      else {
++        curenv->prev_ja_flags = curenv->ja_flags;
++        curenv->ja_flags = n;
++      }
++    }
++  }
++  skip_line();
++}
++
++void ja_search_limit_request()
++{
++  if (!has_arg()) {
++    curenv->ja_search_limit = curenv->prev_ja_search_limit;
++  } else {
++    int n;
++    if (read_integer(&n)) {
++      if (n < 0)
++        warning(WARN_RANGE, "ignoring negative japanese max search: '%1'", n);
++      else {
++        curenv->prev_ja_search_limit = curenv->ja_search_limit;
++        curenv->ja_search_limit = n;
++      }
++    }
++  }
++  skip_line();
++}
++
++int environment::get_ja_flags()
++{
++  return ja_flags;
++}
++
++int environment::get_ja_search_limit()
++{
++  return ja_search_limit;
++}
++
+ node *environment::make_char_node(charinfo *ci)
+ {
+   return make_node(ci, this);
+@@ -834,7 +880,11 @@ environment::environment(symbol nm)
+   seen_break(false),
+   tabs((units_per_inch / 2), TAB_LEFT),
+   name(nm),
+-  hyphen_indicator_char(0)
++  hyphen_indicator_char(0),
++  ja_flags(0),
++  prev_ja_flags(0),
++  ja_search_limit(JA_SEARCH_LIMIT_DEFAULT),
++  prev_ja_search_limit(JA_SEARCH_LIMIT_DEFAULT)
+ {
+   prev_family = family = lookup_family(default_family);
+   prev_fontno = fontno = 1;
+@@ -928,7 +978,11 @@ environment::environment(const environment *e)
+   seen_break(e->seen_break),
+   tabs(e->tabs),
+   name(e->name),	// so that, e.g., '.if "\n[.ev]"0"' works
+-  hyphen_indicator_char(e->hyphen_indicator_char)
++  hyphen_indicator_char(e->hyphen_indicator_char),
++  ja_flags(e->ja_flags),
++  prev_ja_flags(e->prev_ja_flags),
++  ja_search_limit(e->ja_search_limit),
++  prev_ja_search_limit(e->prev_ja_search_limit)
+ {
+ }
+ 
+@@ -973,6 +1027,10 @@ void environment::copy(const environment *e)
+   control_character = e->control_character;
+   no_break_control_character = e->no_break_control_character;
+   hyphen_indicator_char = e->hyphen_indicator_char;
++  ja_flags = e->ja_flags;
++  prev_ja_flags = e->prev_ja_flags;
++  ja_search_limit = e->ja_search_limit;
++  prev_ja_search_limit = e->prev_ja_search_limit;
+   is_spreading = false;
+   line = 0 /* nullptr */;
+   pending_lines = 0 /* nullptr */;
+@@ -1903,9 +1961,13 @@ void environment::newline()
+     to_be_output_width = width_total;
+     line = 0 /* nullptr */;
+   }
+-  else if (is_filling)
++  else if (is_filling) {
+     space_newline();
+-  else {
++    if (ja_flags & JA_ENABLE) {
++      if (line && line->is_word_space_node())
++        line->set_flags(MAYBE_EOL);
++    }
++  } else {
+     to_be_output = line;
+     to_be_output_width = width_total;
+     line = 0 /* nullptr */;
+@@ -4360,6 +4422,10 @@ void init_env_requests()
+   init_request("in", indent);
+   init_request("it", input_trap);
+   init_request("itc", input_trap_continued);
++  init_request("ja", ja_flags_request);
++  init_int_env_reg(".ja", get_ja_flags);
++  init_request("ja.search_limit", ja_search_limit_request);
++  init_int_env_reg(".ja.search_limit", get_ja_search_limit);
+   init_request("lc", leader_character_request);
+   init_request("linetabs", line_tabs_request);
+   init_request("ll", line_length);
+diff --git a/src/roff/troff/env.h b/src/roff/troff/env.h
+index 5484d2cae..093f7a75a 100644
+--- a/src/roff/troff/env.h
++++ b/src/roff/troff/env.h
+@@ -140,6 +140,8 @@ void title();
+ #ifdef WIDOW_CONTROL
+ void widow_control_request();
+ #endif /* WIDOW_CONTROL */
++void ja_flags_request();
++void ja_search_limit_request();
+ 
+ class environment {
+   bool is_dummy_env;			// dummy environment used for \w
+@@ -267,6 +269,17 @@ public:
+   tab_stops tabs;
+   const symbol name;
+   charinfo *hyphen_indicator_char;
++  enum {
++    JA_ENABLE       = 0x001,
++    JA_NOZWSP       = 0x002,
++    JA_DEBUG        = 0x080,
++    JA_DEBUG_MORE   = 0x100,
++    JA_SEARCH_LIMIT_DEFAULT = 3,
++  };
++  int ja_flags;
++  int prev_ja_flags;
++  int ja_search_limit;
++  int prev_ja_search_limit;
+ 
+   environment(symbol);
+   environment(const environment *);	// for temporary environment
+@@ -424,6 +437,9 @@ public:
+   friend void widow_control_request();
+ #endif /* WIDOW_CONTROL */
+   friend void do_divert(bool /* appending */, bool /* boxing */);
++
++  int get_ja_flags();
++  int get_ja_search_limit();
+ };
+ 
+ extern environment *curenv;
+diff --git a/src/roff/troff/input.cpp b/src/roff/troff/input.cpp
+index 1fe5b1631..a8b1376c1 100644
+--- a/src/roff/troff/input.cpp
++++ b/src/roff/troff/input.cpp
+@@ -11085,6 +11085,14 @@ void charinfo::describe_flags()
+       errprint("%1is interword space", separator);
+       separator = comma;
+     }
++    if (flags & HAS_SPACE_AFTER) {
++      errprint("%1has space after", separator);
++      separator = comma;
++    }
++    if (flags & HAS_SPACE_BEFORE) {
++      errprint("%1has space before", separator);
++      separator = comma;
++    }
+     errprint(")\n");
+   }
+ }
+diff --git a/src/roff/troff/node.cpp b/src/roff/troff/node.cpp
+index f3d96427b..2c41f7589 100644
+--- a/src/roff/troff/node.cpp
++++ b/src/roff/troff/node.cpp
+@@ -2084,6 +2084,8 @@ public:
+   void vertical_extent(vunits *, vunits *);
+   void dump_properties();
+   void dump_node();
++
++  void set_n1(node *);
+ };
+ 
+ // Not derived from `container_node`; implements custom triple container
+@@ -2717,9 +2719,9 @@ bool node::is_tag()
+ // TODO: Figure out what a hyphenation code means in the UTF-8 future,
+ // where a "grochar" is a vector of NFD decomposed code points.  Can it
+ // be a scalar--a 32-bit int?
+-unsigned char node::get_break_code()
++int node::get_break_code()
+ {
+-  return 0U;
++  return 0;
+ }
+ 
+ hunits hmotion_node::width()
+@@ -2905,6 +2907,8 @@ public:
+   bool causes_tprint();
+   bool is_tag();
+   void dump_properties();
++
++  bool is_italic_corrected_node();
+ };
+ 
+ node *node::add_italic_correction(hunits *wd)
+@@ -3028,8 +3032,8 @@ class break_char_node : public container_node {
+   // TODO: Figure out what a hyphenation code means in the UTF-8 future,
+   // where a "grochar" is a vector of NFD decomposed code points.  Can
+   // it be a scalar--a 32-bit int?
+-  unsigned char break_code;
+-  unsigned char prev_break_code;
++  int break_code;
++  int prev_break_code;
+   color *col;
+ public:
+   break_char_node(node *, int, int, color *, node * = 0 /* nullptr */);
+@@ -3056,8 +3060,12 @@ public:
+   const char *type();
+   bool causes_tprint();
+   bool is_tag();
+-  unsigned char get_break_code();
++  int get_break_code();
+   void dump_properties();
++
++  node *merge_glyph_node(glyph_node *);
++  hunits italic_correction();
++  hunits left_italic_correction();
+ };
+ 
+ break_char_node::break_char_node(node *n, int bc, int pbc, color *c,
+@@ -3122,7 +3130,9 @@ enum break_char_type {
+   IGNORES_SURROUNDING_HYPHENATION_CODES = 0x04,
+   PROHIBITS_BREAK_BEFORE = 0x08,
+   PROHIBITS_BREAK_AFTER = 0x10,
+-  IS_INTERWORD_SPACE = 0x20
++  IS_INTERWORD_SPACE = 0x20,
++  HAS_SPACE_AFTER = 0x40,
++  HAS_SPACE_BEFORE = 0x80
+ };
+ 
+ node *break_char_node::add_self(node *n, hyphen_list **p)
+@@ -3139,11 +3149,16 @@ node *break_char_node::add_self(node *n, hyphen_list **p)
+   }
+   if (!have_space_node) {
+     if ((prev_break_code & IS_INTERWORD_SPACE)
+-	|| (prev_break_code & PROHIBITS_BREAK_AFTER)) {
++	|| !(curenv->ja_flags & environment::JA_ENABLE)
++        && (prev_break_code & PROHIBITS_BREAK_AFTER)) {
+       if (break_code & PROHIBITS_BREAK_BEFORE)
+ 	// stretchable zero-width space not implemented yet
+ 	;
+       else {
++	if ((curenv->ja_flags & environment::JA_ENABLE) &&
++            (curenv->ja_flags & environment::JA_DEBUG_MORE))
++          fprintf(stderr, "add_self: bc = 0x%03x 0x%03x\n",
++                  break_code, prev_break_code);
+ 	// breakable, stretchable zero-width space not implemented yet
+ 	n = new space_node(H0, col, n);
+ 	n->freeze_space();
+@@ -3587,6 +3602,9 @@ void node::spread_space(int*, hunits*)
+ void space_node::spread_space(int *n_spaces, hunits *desired_space)
+ {
+   if (!set) {
++    if (curenv->ja_flags & environment::JA_ENABLE) {
++      if (*n_spaces == 0) return; // xxxxx
++    }
+     assert(*n_spaces > 0);
+     if (*n_spaces == 1) {
+       n += *desired_space;
+@@ -4977,14 +4995,14 @@ void width_list::dump()
+ 
+ word_space_node::word_space_node(hunits d, color *c, width_list *w,
+ 				 node *x)
+-: space_node(d, c, x), orig_width(w), unformat(false)
++: space_node(d, c, x), orig_width(w), unformat(false), flags(0)
+ {
+ }
+ 
+ word_space_node::word_space_node(hunits d, int s, color *c,
+ 				 width_list *w, bool flag, statem *st,
+ 				 int divlevel, node *x)
+-: space_node(d, s, 0, c, st, divlevel, x), orig_width(w), unformat(flag)
++: space_node(d, s, 0, c, st, divlevel, x), orig_width(w), unformat(flag), flags(0)
+ {
+ }
+ 
+@@ -4996,6 +5014,7 @@ void word_space_node::dump_properties()
+     orig_width->dump();
+   }
+   fprintf(stderr, ", \"unformat\": %s", unformat ? "true" : "false");
++  fprintf(stderr, ", \"flags\": 0x%x", flags);
+   fflush(stderr);
+ }
+ 
+@@ -5021,8 +5040,9 @@ node *word_space_node::copy()
+     w_new_curr = w_new_curr->next;
+     w_old_curr = w_old_curr->next;
+   }
+-  return new word_space_node(n, set, col, w_new, unformat, state,
+-			     div_nest_level);
++  node *nn = new word_space_node(n, set, col, w_new, unformat, state, div_nest_level);
++  nn->set_flags(flags);
++  return nn;
+ }
+ 
+ bool word_space_node::set_unformat_flag()
+@@ -5729,6 +5749,7 @@ node *node::add_char(charinfo *ci, environment *env,
+   case charinfo::TRANSLATE_HYPHEN_INDICATOR:
+     return add_discretionary_hyphen();
+   }
++  node *gn_merged = 0;
+   charinfo *tem = ci->get_translation();
+   if (tem != 0 /* nullptr */)
+     ci = tem;
+@@ -5762,6 +5783,7 @@ node *node::add_char(charinfo *ci, environment *env,
+       else {
+ 	*widthp += p->width() - old_width;
+ 	res = p;
++	gn_merged = gn;
+       }
+       if (glyph_comp_np)
+ 	*glyph_comp_np = res;
+@@ -5778,12 +5800,353 @@ node *node::add_char(charinfo *ci, environment *env,
+     break_code = PROHIBITS_BREAK_BEFORE;
+   if (ci->prohibits_break_after())
+     break_code |= PROHIBITS_BREAK_AFTER;
++  if (ci->has_space_after())
++    break_code |= HAS_SPACE_AFTER;
++  if (ci->has_space_before())
++    break_code |= HAS_SPACE_BEFORE;
+   if (ci->is_interword_space())
+     break_code |= IS_INTERWORD_SPACE;
++
++  int prev_break_code = get_break_code();
++  if (env->ja_flags & environment::JA_ENABLE) {
++
++    // The following code removes line breaks at the end of Japanese
++    // lines and adds word_space_node in place of spaces removed from
++    // glyphs in proportional fonts.
++
++    int u = ci->get_unicode_mapping();
++
++    bool blocked = false;
++    node *prev_glyph = 0;
++    node *prev_space = 0;
++
++    {
++      // The first node is either glyph_node or kern_pair_node.
++      // Debugging output is omitted.
++      if (0 && (env->ja_flags & environment::JA_DEBUG_MORE)) {
++        char debug_message[100];
++        sprintf(debug_message, "%s, w = %d", res->type(), res->width().to_units());
++        fprintf(stderr, "%3d/%d%s%-40s# bc = 0x%03x 0x%03x\n",
++                0, 0, gn_merged? "*" : " ", debug_message,
++                break_code, prev_break_code & 0xfff);
++      }
++      prev_break_code = -1;
++      int i = 0, m = env->ja_search_limit;
++      for (node *p = res; node *n = p->next; p = n) {
++        bool _break = false;
++        if (i++ > m) {
++          break;
++        } else {
++          m++;
++          if (n->is_left_italic_corrected_node() ||
++              n->is_italic_corrected_node()) {
++            ;
++          } else if (n->is_word_space_node()) {
++            if (!prev_space) prev_space = p;
++          } else if (n->is_dummy_node()) {
++            blocked = true;
++          } else if (n->width() > 0) {
++            if (prev_break_code < 0) prev_break_code = n->get_break_code();
++            if (!prev_glyph) prev_glyph = p;
++            _break = true;
++            // m--;
++          }
++        }
++        if (env->ja_flags & environment::JA_DEBUG_MORE) {
++          char debug_message[100];
++          sprintf(debug_message, "%s, w = %d", n->type(), n->width().to_units());
++          fprintf(stderr, "%3d/%d%s%-40s# bc = 0x%03x 0x%03x\n",
++                  -i, m, gn_merged? "*" : " ", debug_message,
++                  break_code, prev_break_code & 0xfff);
++        }
++        if (_break) break;
++      }
++    }
++
++    // Assuming that the glyph width of a monospaced font is around 1em,
++    // and that the glyph width of a proportional font is around 0.5em
++    // when the spacing within the glyph is removed, this function
++    // determines whether word_space_node can be added. (For kerned
++    // nodes, last_char_node() is used to determine the glyph width.)
++
++    hunits em = env->get_size();
++    hunits w = em;
++    if (node *n = res) {
++      if (node *nn = res->last_char_node())
++        n = nn;
++      w = n->width();
++    }
++    hunits prev_w = em;
++    if (gn_merged) {
++      prev_w = gn_merged->width();
++    } else if (prev_glyph) {
++      if (node *n = prev_glyph->next) {
++        if (node *nn = prev_glyph->next->last_char_node())
++          n = nn;
++        prev_w = n->width();
++      }
++    }
++
++    int need_space = 0;  // `need_space` requests that `word_space_node`
++                         // be added between the current glyph and the
++                         // previous glyph.
++
++    int has_newline =    // between the break_char_node and previous one.
++      prev_space && prev_space->next &&
++      (prev_space->next->get_flags() & MAYBE_EOL);
++
++    if (prev_break_code < 0) {
++      if (env->ja_flags & environment::JA_DEBUG) {
++        char debug_message[100] = "(0) prev_break_code has not yet been obtained";
++        fprintf(stderr, "u%04X %-40s# bc = 0x%03x 0x%03x\n",
++                u, debug_message,
++                break_code, prev_break_code & 0xfff);
++      }
++    }
++
++    // The following is a direct code translation of Figure 66 from
++    // section 3.1.4 of https://www.w3.org/TR/jlreq/.
++    // (1) closing brackets following full stops
++    // …である。」この…
++    // (2) full stops following closing brackets
++    // …である）。この…
++    // (6) closing brackets following closing brackets
++    // …である）」この…
++    else if ((prev_break_code & HAS_SPACE_AFTER) &&
++             (break_code & IS_INTERWORD_SPACE) &&
++             !(break_code & (HAS_SPACE_BEFORE|PROHIBITS_BREAK_BEFORE)) &&
++             prev_w > 0 && prev_w <= em / 2) {
++
++      // When the preceding character is "・", the two flags
++      // HAS_SPACE_AFTER and HAS_SPACE_BEFORE are applied to need_space.
++      need_space |= prev_break_code & (HAS_SPACE_AFTER|HAS_SPACE_BEFORE);
++      if (env->ja_flags & environment::JA_DEBUG) {
++        char debug_message[100];
++        sprintf(debug_message, "%s ns = 0x%03x", "(1,2,6)", need_space);
++        fprintf(stderr, "u%04X %-40s# bc = 0x%03x 0x%03x\n",
++                u, debug_message, break_code, prev_break_code & 0xfff);
++      }
++    }
++
++    // (3) opening brackets following commas
++    // …である、「この…
++    // (4) opening brackets following closing brackets
++    // …である」「この…
++    // (7) continuation of brackets and middle dots
++    // …「編集」・「校正」…
++    else if ((prev_break_code & HAS_SPACE_AFTER) &&
++             (break_code & HAS_SPACE_BEFORE) &&
++             !(break_code & PROHIBITS_BREAK_BEFORE) &&
++             ((w > 0 && w <= em / 2) && (prev_w > 0 && prev_w <= em / 2))) {
++      need_space |= prev_break_code & (HAS_SPACE_AFTER|HAS_SPACE_BEFORE);
++      if (env->ja_flags & environment::JA_DEBUG) {
++        char debug_message[100];
++        sprintf(debug_message, "%s ns = 0x%03x", "(3,4,7)", need_space);
++        fprintf(stderr, "u%04X %-40s# bc = 0x%03x 0x%03x\n",
++                u, debug_message, break_code, prev_break_code & 0xfff);
++      }
++    }
++
++    // (5) opening brackets following opening brackts
++    // …である「『この…
++    else if ((prev_break_code & IS_INTERWORD_SPACE) &&
++             !(prev_break_code & PROHIBITS_BREAK_AFTER) &&
++             (break_code & HAS_SPACE_BEFORE) &&
++             !(break_code & PROHIBITS_BREAK_BEFORE) &&
++             w > 0 && w <= em / 2) {
++      need_space |= break_code & HAS_SPACE_BEFORE;
++      if (env->ja_flags & environment::JA_DEBUG) {
++        char debug_message[100];
++        sprintf(debug_message, "%s ns = 0x%03x", "(5)", need_space);
++        fprintf(stderr, "u%04X %-40s# bc = 0x%03x 0x%03x\n",
++                u, debug_message, break_code, prev_break_code & 0xfff);
++      }
++    }
++
++    // (x) consider whether to retain newline as space at EOL in
++    // japanese, and use of puncts not in (1) through (7) above.
++    else if ((prev_break_code & IS_INTERWORD_SPACE) &&
++             has_newline &&
++             (break_code & IS_INTERWORD_SPACE)) {
++      if ((prev_break_code & HAS_SPACE_AFTER) ||
++          (break_code & HAS_SPACE_BEFORE))
++        need_space |= HAS_SPACE_AFTER;
++      if (env->ja_flags & environment::JA_DEBUG) {
++        char debug_message[100];
++        sprintf(debug_message, "%s ns = 0x%03x", "(x)", need_space);
++        fprintf(stderr, "u%04X %-40s# bc = 0x%03x 0x%03x\n",
++                u, debug_message, break_code, prev_break_code & 0xfff);
++      }
++    }
++
++    // put word_spac_node at the boundary between Japanese and
++    // Western text.
++    // (j2w) Japanese → Western
++    else if ((prev_break_code & IS_INTERWORD_SPACE) &&
++             !(break_code & IS_INTERWORD_SPACE) &&
++             !(break_code & PROHIBITS_BREAK_BEFORE)
++             ) {
++      need_space |= prev_break_code & HAS_SPACE_AFTER;
++      if (has_newline)
++        need_space |= HAS_SPACE_AFTER;
++      if (env->ja_flags & environment::JA_DEBUG) {
++        char debug_message[100];
++        sprintf(debug_message, "%s ns = 0x%03x", "(j2w)", need_space);
++        fprintf(stderr, "u%04X %-40s# bc = 0x%03x 0x%03x\n",
++                u, debug_message, break_code, prev_break_code & 0xfff);
++      }
++    }
++    // (w2j) Western → Japanese
++    else if (!(prev_break_code & IS_INTERWORD_SPACE) &&
++             (break_code & IS_INTERWORD_SPACE) &&
++             !(prev_break_code & PROHIBITS_BREAK_AFTER)
++             ) {
++      need_space |= prev_break_code & HAS_SPACE_AFTER;
++      if (has_newline || (break_code & HAS_SPACE_BEFORE))
++        need_space |= HAS_SPACE_AFTER;
++      if (env->ja_flags & environment::JA_DEBUG) {
++        char debug_message[100];
++        sprintf(debug_message, "%s ns = 0x%03x", "(w2j)", need_space);
++        fprintf(stderr, "u%04X %-40s# bc = 0x%03x 0x%03x\n",
++                u, debug_message, break_code, prev_break_code & 0xfff);
++      }
++    }
++
++    // (-) display unicode even if there is nothing to do.
++    else {
++      if (env->ja_flags & environment::JA_DEBUG) {
++        if ((break_code | prev_break_code) & ~7) {
++          char debug_message[100] = "(-) nothing to do";
++          fprintf(stderr, "u%04X %-40s# bc = 0x%03x 0x%03x\n",
++                  u, debug_message, break_code, prev_break_code & 0xfff);
++        }
++      }
++    }
++
++    bool zwsp = true;
++
++    // Line break is unnecessary between Japanese chars. delete it.
++    if (!need_space && has_newline &&
++        (prev_break_code & IS_INTERWORD_SPACE) &&
++        (break_code & IS_INTERWORD_SPACE)
++        ) {
++      node *spc = prev_space->next;
++      if (spc && spc->is_word_space_node()) {
++        if (env->ja_flags & environment::JA_DEBUG) {
++          char debug_message[100] = "delete space -- probably unnecessary";
++          fprintf(stderr, "u%04X %-40s# bc = 0x%03x 0x%03x\n",
++                  u, debug_message, break_code, prev_break_code & 0xfff);
++        }
++        prev_space->next = prev_space->next->next;
++        *widthp -= spc->width();
++        *spacep -= spc->nspaces();
++        delete spc;
++        // After deletion, check the kerning (merging) with the previous glyph.
++        if (prev_space->next) {
++          hunits old_width = prev_space->width() + prev_space->next->width();
++          if (node *p = prev_space->merge_self(prev_space->next)) {
++            *widthp += p->width() - old_width;
++            if (res == prev_space)
++              res = prev_space = p;
++            else
++              prev_space = p;
++          }
++        }
++        prev_space = 0;
++      }
++    }
++
++    else if (blocked) {
++      if (env->ja_flags & environment::JA_DEBUG) {
++        char debug_message[100] = "add space blocked";
++        fprintf(stderr, "u%04X %-40s# bc = 0x%03x 0x%03x\n",
++                u, debug_message, break_code, prev_break_code & 0xfff);
++      }
++      zwsp = false;
++    }
++
++    // If space is needed,
++    else if (need_space) {
++      node *spc = 0;
++      if (prev_space) spc = prev_space->next;
++      // and if there is a space in the input, it will be used as is.
++      if (spc && spc->is_word_space_node()) {
++        if (env->ja_flags & environment::JA_DEBUG) {
++        char debug_message[100] = "keep space";
++          fprintf(stderr, "u%04X %-40s# bc = 0x%03x 0x%03x\n",
++                  u, debug_message, break_code, prev_break_code & 0xfff);
++        }
++      } else {
++        // Add one or two word_space_nodes.
++        hunits w = env->get_space_width();
++        color *col = env->get_fill_color();
++        if ((need_space & HAS_SPACE_BEFORE) && (need_space & HAS_SPACE_AFTER)) {
++          w = w / 2;
++          if (env->ja_flags & environment::JA_DEBUG) {
++            char debug_message[100];
++            sprintf(debug_message, "add %d space after", w.to_units());
++            fprintf(stderr, "u%04X %-40s# bc = 0x%03x 0x%03x\n",
++                    u, debug_message, break_code, prev_break_code & 0xfff);
++          }
++          if (res->next) {
++            node *spc = res->next->next = new space_node(w, col, res->next->next);
++            *widthp += spc->width();
++            *spacep += spc->nspaces();
++          }
++        }
++        if (env->ja_flags & environment::JA_DEBUG) {
++          char debug_message[100];
++          sprintf(debug_message, "add %d space after", w.to_units());
++          fprintf(stderr, "u%04X %-40s# bc = 0x%03x 0x%03x\n",
++                  u, debug_message, break_code, prev_break_code & 0xfff);
++        }
++        node *spc = res->next = new space_node(w, col, res->next);
++        *widthp += spc->width();
++        *spacep += spc->nspaces();
++      }
++      zwsp = false;
++    }
++
++    else if (prev_space) {
++      zwsp = false;
++    }
++
++    // Add a 0-width space (intended to be breakable and stretchable)
++    // for justification. (This must be added before adjusting the
++    // spacing.)
++    if (zwsp &&
++        (prev_break_code & IS_INTERWORD_SPACE) &&
++        !(prev_break_code & PROHIBITS_BREAK_AFTER) &&
++        (break_code & IS_INTERWORD_SPACE) &&
++        !(break_code & PROHIBITS_BREAK_BEFORE) &&
++        !gn_merged) {
++      if (!(env->ja_flags & environment::JA_NOZWSP)) {
++        if (env->ja_flags & environment::JA_DEBUG_MORE) {
++          char debug_message[100] = "add 0-width space";
++          fprintf(stderr, "u%04X %-40s# bc = 0x%03x 0x%03x\n",
++                  u, debug_message, break_code, prev_break_code & 0xfff);
++        }
++        color *col = env->get_fill_color();
++        node *spc = res->next = new space_node(H0, col, res->next);
++        *widthp += spc->width();   // xxxxx
++        *spacep += spc->nspaces(); // xxxxx
++      }
++    }
++  }
++
++  if (gn_merged) {
++    // As a result of merging the glyphs, PROHIBITS_BREAK_BEFORE must
++    // integrate prev_break_code into break_code. The same applies to
++    // HAS_SPACE_BEFORE.
++    break_code &= ~(PROHIBITS_BREAK_BEFORE|HAS_SPACE_BEFORE);
++    if (prev_break_code != -1)
++      break_code |= prev_break_code & (PROHIBITS_BREAK_BEFORE|HAS_SPACE_BEFORE);
++    prev_break_code = 0;
++  }
+   if (break_code != 0) {
+     node *next1 = res->next;
+     res->next = 0 /* nullptr */;
+-    res = new break_char_node(res, break_code, get_break_code(),
++    res = new break_char_node(res, break_code, prev_break_code,
+ 			      env->get_fill_color(), next1);
+   }
+   return res;
+@@ -6476,7 +6839,7 @@ bool break_char_node::is_tag()
+   return false;
+ }
+ 
+-unsigned char break_char_node::get_break_code()
++int break_char_node::get_break_code()
+ {
+   return break_code;
+ }
+@@ -7575,6 +7938,108 @@ void init_node_requests()
+   soft_hyphen_char = lookup_charinfo(HYPHEN_SYMBOL);
+ }
+ 
++void node::set_n1(node *n)
++{
++}
++
++void kern_pair_node::set_n1(node *n)
++{
++  n1 = n;
++}
++
++bool node::is_word_space_node()
++{
++  return false;
++}
++
++bool word_space_node::is_word_space_node()
++{
++  return true;
++}
++
++int node::get_flags()
++{
++  return false;
++}
++
++int word_space_node::get_flags()
++{
++  return flags;
++}
++
++void node::set_flags(int)
++{
++}
++
++void word_space_node::set_flags(int f)
++{
++  flags = f;
++}
++
++bool node::is_dummy_node()
++{
++  return false;
++}
++
++bool dummy_node::is_dummy_node()
++{
++  return true;
++}
++
++bool node::is_italic_corrected_node()
++{
++  return false;
++}
++
++bool italic_corrected_node::is_italic_corrected_node()
++{
++  return true;
++}
++
++bool node::is_left_italic_corrected_node()
++{
++  return false;
++}
++
++bool left_italic_corrected_node::is_left_italic_corrected_node()
++{
++  return true;
++}
++
++node *break_char_node::merge_glyph_node(glyph_node *gn)
++{
++  if (node *n = static_cast<container_node *>(this)->nodes) {
++    node *p = 0;
++    // kerned character pair node
++    if (node *n2 = n->last_char_node()) {
++      if (p = gn->merge_self(n2))
++        p->set_n1(n);
++    }
++    // composite node
++    // glyph node
++    else
++      p = gn->merge_self(n);
++    if (p)
++      p->next = next;
++    return p;
++  }
++  return 0;
++}
++
++hunits break_char_node::italic_correction()
++{
++  if (node *n = static_cast<container_node *>(this)->nodes)
++    return n->italic_correction();
++  return H0;
++}
++
++hunits break_char_node::left_italic_correction()
++{
++  if (node *n = static_cast<container_node *>(this)->nodes)
++    return n->left_italic_correction();
++  return H0;
++}
++
+ // Local Variables:
+ // fill-column: 72
+ // mode: C++
+diff --git a/src/roff/troff/node.h b/src/roff/troff/node.h
+index 08891c417..78d70c676 100644
+--- a/src/roff/troff/node.h
++++ b/src/roff/troff/node.h
+@@ -69,7 +69,7 @@ struct node {
+   // TODO: Figure out what a hyphenation code means in the UTF-8 future,
+   // where a "grochar" is a vector of NFD decomposed code points.  Can
+   // it be a scalar--a 32-bit int?
+-  virtual unsigned char get_break_code();
++  virtual int get_break_code();
+   virtual hunits width();
+   virtual hunits subscript_correction();
+   virtual hunits italic_correction();
+@@ -119,6 +119,14 @@ struct node {
+   virtual const char *type() = 0;
+   virtual void dump_properties();
+   virtual void dump_node();
++
++  virtual bool is_word_space_node();
++  virtual bool is_dummy_node();
++  virtual bool is_italic_corrected_node();
++  virtual bool is_left_italic_corrected_node();
++  virtual int get_flags();
++  virtual void set_flags(int);
++  virtual void set_n1(node *);
+ };
+ 
+ inline node::node()
+@@ -187,6 +195,8 @@ public:
+   bool causes_tprint();
+   bool is_tag();
+   const char *type();
++
++  bool is_line_start_node();
+ };
+ 
+ // Represent a space of any width, including zero.
+@@ -238,6 +248,7 @@ class word_space_node : public space_node {
+ protected:
+   width_list *orig_width;
+   bool unformat;
++  int flags;
+   word_space_node(hunits /* d */, int /* s */, color * /* c */,
+ 		  width_list * /* w */, bool /* flag */,
+ 		  statem * /* st */, int /* divlevel */,
+@@ -257,6 +268,14 @@ public:
+   bool causes_tprint();
+   bool is_tag();
+   void dump_properties();
++
++  bool is_word_space_node();
++  int get_flags();
++  void set_flags(int);
++};
++
++enum {
++  MAYBE_EOL = 1,
+ };
+ 
+ class unbreakable_space_node : public word_space_node {
+@@ -481,6 +500,8 @@ public:
+   bool causes_tprint();
+   bool is_tag();
+   hyphenation_type get_hyphenation_type();
++
++  bool is_dummy_node();
+ };
+ 
+ class transparent_dummy_node : public node {
+@@ -543,6 +564,7 @@ public:
+   node *add_self(node *, hyphen_list **);
+   node *merge_glyph_node(glyph_node *);
+   void dump_properties();
++  bool is_left_italic_corrected_node();
+ };
+ 
+ class overstrike_node : public container_node {

@@ -27,12 +27,12 @@ SUPP_SUFFIX?=	.s
 EMBED?=
 SPLIT?=
 
-ROPTS?=		-F palt="*,*,palt"
+ROPTS?=		-F palt -F liga -F kern
 IOPTS?=		$(ROPTS) -i 50 -m -a 12
 BOPTS?=		$(ROPTS)
 BIOPTS?=	$(IOPTS)
-VOPTS?=		-V -F palt="*,*,vpal" -F vert="*,*,vrt2|vkna"
-IVOPTS?=	$(VOPTS) -i 50 -a -12
+VOPTS?=		-V -F vpal -F vrt2 -F vkna
+IVOPTS?=	$(VOPTS) -i 50 -m -a 12
 BVOPTS?=	$(VOPTS)
 BIVOPTS?=	$(IVOPTS)
 
@@ -100,8 +100,8 @@ $(foreach fam,${FAM}, $(foreach sty,${STY}, \
 download-files=	\
 	$(foreach fam,${FAM},$(foreach sty,${STY},$(fam)$(sty).download))
 
-download:	files/merge-download-files.pl $(download-files)
-	perl $< $(if ${FOUNDRY}, -y ${FOUNDRY}) \
+download:	merge-download-files $(download-files)
+	merge-download-files $(if ${FOUNDRY}, -y ${FOUNDRY}) \
 		${SITE_FONT}/devpdf/download $(download-files) > $@
 
 install::	all download

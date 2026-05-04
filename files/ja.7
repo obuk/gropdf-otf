@@ -1,0 +1,323 @@
+.\" -*- nroff -*-
+.
+.TH JA 7
+.
+.\" ------------------------------------------------------------------
+.SH NAME
+.\" ------------------------------------------------------------------
+.
+ja \- enhance Japanese text processing.
+.
+.ds CW-font CR
+.de CW
+.  if \\n[.$] \{\
+.    rm cw-result
+.    if (\\n[.$] >= 3) .as cw-result \\$3\"
+.    ie '\\*[\\$0-font]'' .ds cw-font \\$0
+.    el .ds cw-font \\*[\\$0-font]
+.    as cw-result \f[\\*[cw-font]]\\$1\f[R]\"
+.    if (\\n[.$] >= 2) .as cw-result \\$2\"
+.    nop \&\\*[cw-result]
+.    rm cw-result
+.    rm cw-font
+.  \}
+..
+.als HR CW
+.
+.\" ------------------------------------------------------------------
+.SH SYNOPSYS
+.\" ------------------------------------------------------------------
+.
+.EX
+$ man -Tpdf -Lja groff.7 >a.pdf
+$ zcat `man -w -Lja groff.7` | groff -Tpdf -kt -mja -mandoc - >a.pdf
+$ perldocjp -u \c
+.I podname \c
+.gcolor grey50
+| perl -lpe "s/\e"(\e\ew<.*?>)\e"/\e`\e`\e$1''/g" \c
+.gcolor
+\e
+| pod2man --utf8 --fixed=CR \c
+| groff -k -Tpdf -mandoc -mja - >a.pdf
+.EE
+.
+pod2man の出力で verbatim 段落の行間を狭くするには、
+.EX
+| sed -e '/^\e.TH/i.am Vb\en.setlocale english\en..\en.am Ve\en.setlocale\en..'
+.EE
+.
+.
+groff を作り直すには、
+.EX
+$ git clone https://git.savannah.gnu.org/git/groff.git && cd groff
+.\" $ git reset --hard
+.\" $ git checkout master
+.\" $ git pull origin master
+$ git checkout 1.24.0
+$ patch -p1 <troff-ja.diff
+$ ./bootstrap
+$ ./configure --prefix=$HOME
+$ make
+.EE
+.
+.\" ------------------------------------------------------------------
+.SH DESCRIPTION
+.\" ------------------------------------------------------------------
+.
+groff 1.24.0 (troff) の日本語処理に以下の機能を追加します。
+.
+.PD 0
+.IP (1) 4
+日本語の行末の改行やマクロが付加する改行を削除します。
+(環境を切り替えるものは除きます。)
+.
+.IP (2)
+プロポーショナルフォント (opentype palt など) で、
+全角の幅の約物から取り除かれるアキの代りにワードスペースを配置します。
+字間にも0幅スペースを配置します。
+(スペースは
+.CW \e&
+で抑止できます。)
+.
+.IP (3)
+日本語処理の動作は
+.CW .ja
+リクエストで指定します。
+.
+.IP (4)
+ja.tmac を\c
+.UR https://www.w3.org/TR/jlreq/
+日本語組版処理の要件 (JLreq)
+.UE
+に近付けます。
+字体に含まれるアキの配置も定義します。
+.
+.IP (5)
+1.24.0 の break_char_node は、カーニングやイタリック補正 (\e/) ができ
+ないという制限があります。
+そのうち直るかもしれませんが、上の (1) (2) を妨げるため、
+ここで修正します。
+.
+.PD
+.
+.PP
+修正した troff では、
+.UR https://qiita.com/CodeOne/items/43d2b8e4247b020652b2
+日本語文章中、英単語の両端にスペースをつける人
+.UE
+のように入力する必要がありますが、
+.
+表の項目に日本語が含まれるときでも
+.CW T{
+と
+.CW T}
+で囲む必要がなくなります。
+.
+.
+.\" ------------------------------------------------------------------
+.SS ja.tmac
+.\" ------------------------------------------------------------------
+.
+ja.tmac は日本語の文字のフラグを定義します。
+groff 1.24.0 で定義されているものと合わせて示します。
+.
+.RS +2
+.TS
+tab(;);
+l l l.
+.ft HR
+フラグ;内部名;説明
+.ft
+.vs -2
+_
+.T&
+n l l.
+128;PROHIBITS_BREAK_BEFORE;T{
+.UR https://www.w3.org/TR/jlreq/#cl-02
+cl-02
+.UE
+類。直前のブレークを禁止する。
+T}
+256;PROHIBITS_BREAK_AFTER;T{
+.UR https://www.w3.org/TR/jlreq/#cl-0
+cl-01
+.UE
+類。直後のブレークを禁止する。
+T}
+512;IS_INTERWORD_SPACE;日本語の文字。前後でブレークを許可する。
+1024;HAS_SPACE_AFTER;グリフの後にアキがある。(追加)
+2048;HAS_SPACE_BEFORE;グリフの前にアキがある。(追加)
+_
+.TE
+.vs
+.RE
+.PP
+.ne 3
+ja.tmac の妥当性は、スクリプト ja.tmac.pl で、
+フォント (.otf) と特性 (-F palt) を指定して確認します。
+.\" 例を示します。
+.
+.EX
+$ perl ja.tmac.pl -F palt HaranoAjiMincho-Regular.otf
+$ perl ja.tmac.pl -F palt NotoSerifCJKjp-Regular.otf
+.EE
+.
+HAS_SPACE_BEFORE (AFTER) を
+opentype-feature palt の xadvance と xplacement で確かめます
+（横書のみ）。
+.
+PROHIBITS_BREAK_BEFORE (AFTER) の方は
+.UR https://metacpan.org/pod/Unicode::UCD
+Unicode::UCD
+.UE
+でカテゴリや名称を確かめます。
+.
+.ig
+アキのある字体は、字体の前または後に二分アキ、
+前後両方に四分アキを配置して全角になるようにデザインされていますが、
+この修正では少し小さなワードスペースを使います。
+..
+.
+.\" ------------------------------------------------------------------
+.SS .ja リクエスト
+.\" ------------------------------------------------------------------
+.
+この修正で追加される groff の日本語処理の動作を指定するために使用します。
+.PD 0
+.EX
+\&.ja [\c
+.I f\c
+]\c
+	\e\(dq 現在の設定値値は\|\c
+.CW \en[.ja] \c
+\&\|で得られます。
+.EE
+.
+.RS +2
+.TS
+tab(;);
+rb lb.
+フラグ \f(CIf\fP;説明
+_
+.T&
+n l.
+1;日本語処理を有効にします。
+2;字間に0幅スペースを配置しない。
+128;デバグ用に内部情報を出力する。
+256;デバグ用に内部情報（詳細）を出力する。
+_
+.TE
+.RE
+.PD
+.
+.\" ------------------------------------------------------------------
+.SS 連続する約物
+.\" ------------------------------------------------------------------
+.
+.ds 1) \[u2460]
+.ds 2) \[u2461]
+.ds 3) \[u2462]
+.ds 4) \[u2463]
+.ds 5) \[u2464]
+.ds 6) \[u2465]
+.ds 7) \[u2466]
+.ds 8) \[u2467]
+.ds 9) \[u2468]
+.
+.PP
+約物の前後にワードスペースが適切に配置されることを
+日本語組版処理の要件（日本語版）の「\c
+.UR https://www.w3.org/TR/jlreq/#positioning_of_consecutive_opening_brackets_closing_brackets_comma_full_stops_and_middle_dots
+3.1.4 始め括弧類，終わり括弧類，読点類，句点類及び中点類が連続する場合の配置方法
+.UE 」の\c
+.UR https://www.w3.org/TR/jlreq/#fig2_13
+図69
+.UE \c
+で確かめます。
+.
+.de MC
+.  nr mc*ll \\n[.l]
+.  nr mc*po \\n[.o]
+.  nr mc*in \\n[.i]
+.  ie (\\n[.$]>=1) .nr mc*cw \\$1
+.  el              .nr mc*cw 44n
+.  ie (\\n[.$]>=2) .nr mc*gw \\$2
+.  el              .nr mc*gw 1n
+.  1C
+..
+.de RC
+.  br
+.  mk mc*here
+.  nr mc*there -\\n[mc*here]u
+.\" .  nr mc*there -1v
+.  if (\\n[mc*there] > 0) .sp \\n[mc*there]u
+.  in \\n[mc*in]u
+.  po \\n[mc*po]u
+.  ll \\n[mc*ll]u
+..
+.de 1C
+.  RC
+.  mk mc*there
+.  mk
+.  in 0
+.  po (\\n[mc*po]u + \\n[mc*in]u)u
+.  ll \\n[mc*cw]u
+..
+.de 2C
+.  br
+.  mk mc*here
+.  if (\\n[mc*here] > \\n[mc*there]) .nr mc*there \\n[mc*here]
+.  rt
+.  in 0
+.  po (\\n[mc*po]u + \\n[mc*in]u)u
+.  po +(\\n[mc*cw]u + \\n[mc*gw]u)u
+.  ll \\n[mc*cw]u
+..
+.de 3C
+.  2C
+.  po +(\\n[mc*cw]u + \\n[mc*gw]u)u
+..
+.PP
+.MC 27n 2n
+.HR スペースあり
+.nr ss.bak \n[.ss]
+.ss (\n[.ss] * 2)
+.nf
+\*(1) …である。」この…
+\*(2) …である）。この…
+\*(3) …である、「この…
+\*(4) …である」「この…
+\*(5) …である「『この…
+\*(6) …である）」この…
+\*(7) …編集」・「校正…
+.fi
+.ss \n[ss.bak]
+.
+.2C
+.HR "スペースなし (\e& で抑止)"
+.nf
+\*(1) …である。」\&この…
+\*(2) …である）。\&この…
+\*(3) …である、\&「この…
+\*(4) …である」\&「この…
+\*(5) …である\&「『この…
+\*(6) …である）」\&この…
+\*(7) …編集」・\&「校正…
+.fi
+.
+.3C
+.HR "スペースなし (等幅フォント)"
+.ft CR
+.ps +2
+.nf
+\*(1) …である。」この…
+\*(2) …である）。この…
+\*(3) …である、「この…
+\*(4) …である」「この…
+\*(5) …である「『この…
+\*(6) …である）」この…
+\*(7) …編集」・「校正…
+.fi
+.ft
+.ps
+.RC

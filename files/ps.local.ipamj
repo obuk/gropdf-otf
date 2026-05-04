@@ -13,7 +13,7 @@
 .    if \\n[my:debug-font]>=2 .tm fzoom \*[my:name] \\n[\*[my:name].zoom]
 .    fzoom \*[my:name] \\n[\*[my:name].zoom]
 .    if \\n[my:debug-font]>=2 .tm fspecial \\$2 \\*[\\$2.s] \*[my:name]
-.    fspecial \\$2 \*[\\$2.s] \*[my:name]
+.    fspecial \\$2 \\*[\\$2.s] \*[my:name]
 .    if \\n[my:debug-font]>=2 .tm fspecial \\$1 \\$2 \\*[\\$2.s] \*[my:name]
 .    fspecial \\$1 \\$2 \\*[\\$2.s] \*[my:name]
 .  \}\}

@@ -61,8 +61,8 @@ $(foreach fam,${FAM}, $(foreach sty,${STY}, \
 download-files=	\
 	$(foreach fam,${FAM},$(foreach sty,${STY},$(fam)$(sty).download))
 
-download:	files/merge-download-files.pl $(download-files)
-	perl $< $(if ${FOUNDRY}, -y ${FOUNDRY}) \
+download:	merge-download-files $(download-files)
+	merge-download-files $(if ${FOUNDRY}, -y ${FOUNDRY}) \
 		${SITE_FONT}/devpdf/download $(download-files) > $@
 
 install::	all download $F.pfb

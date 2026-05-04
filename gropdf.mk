@@ -19,7 +19,7 @@ install::	${GROFF_FONT}/devpdf/DESC gropdf-otf pre-grops
 	(sed -E -e '/^((pre|post)pro|papersize)($$|\s)/d' $<; \
 	echo papersize ${PAPERSIZE}; \
 	echo postpro `which gropdf-otf`; \
-	echo prepro `which pre-grops`; \
+	echo \#prepro `which pre-grops`; \
 	) > /tmp/DESC
 	cmp -s /tmp/DESC $< || \
 		case "$<" in \

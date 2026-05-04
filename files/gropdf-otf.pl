@@ -1,11 +1,12 @@
 #!@PERL@
 #
-#       gropdf          : PDF post processor for groff
+# gropdf: PDF post processor for groff
 #
-# Copyright (C) 2011-2025 Free Software Foundation, Inc.
-#      Written by Deri James <deri@chuzzlewit.myzen.co.uk>
+# Copyright 2011-2025 Free Software Foundation, Inc.
 #
-# This file is part of groff.
+# Written by Deri James <deri@chuzzlewit.myzen.co.uk>
+#
+# This file is part of groff, the GNU roff typesetting system.
 #
 # groff is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free
@@ -28,7 +29,7 @@ use Encode qw(encode decode);
 use POSIX qw(mktime);
 use File::Spec;
 
-our $VERSION = "2026.01.13";
+our $VERSION = "2026.03.04";
 
 use List::Util qw(min max sum uniq);
 use File::Temp qw/tempfile/;
@@ -243,6 +244,7 @@ my $gotzlib=0;
 my $gotinline=0;
 my $gotexif=0;
 my $xitcd=0;
+my $warnexit=0;
 
 my $rc = eval
 {
@@ -472,7 +474,7 @@ begincmap
 1 begincodespacerange
 <0000> <FFFF>
 endcodespacerange
-2 beginbfrange
+5 beginbfrange
 <1f> <1f> <002d>
 <27> <27> <0027>
 <5e> <5e> <005e>
@@ -494,8 +496,8 @@ sub usage
     my $had_error = shift;
     $stream = *STDERR if $had_error;
     print $stream
-"usage: $prog [-dels] [-F font-directory] [-I inclusion-directory]" .
-" [-p paper-format] [-u [cmap-file]] [-y foundry] [file ...]\n" .
+"usage: $prog [-delsW] [-F font-directory] [-I inclusion-directory]" .
+" [--opt option-bits] [-p paper-format] [--pdfver {1.4|1.7}] [-u [cmap-file]] [-y foundry] [file ...]\n" .
 "usage: $prog {-v | --version}\n" .
 "usage: $prog --help\n";
     if (!$had_error)
@@ -504,7 +506,7 @@ sub usage
 "Translate the output of troff(1) into Portable Document Format.\n" .
 "See the gropdf(1) manual page.\n";
     }
-    exit($had_error);
+    exit($had_error ? 2 : 0);
 }
 
 my $fd;
@@ -539,10 +541,10 @@ my $parclntyp=qr/(?:[\d\w]|\([+-]?[\S]{2}|$parcln)/;
 if (!GetOptions('F=s' => \@fdlist, 'I=s' => \@idirs, 'l' => \$frot,
     'p=s' => \$fpsz, 'd!' => \$debug, 'help' => \$want_help, 'pdfver=f' => \$PDFver,
     'v' => \$version, 'version' => \$version, 'opt=s' => \$options,
-    'e' => \$embedall, 'y=s' => \@Foundry, 's' => \$stats,
+    'e' => \$embedall, 'y=s' => \@Foundry, 's' => \$stats, 'W' => \$warnexit,
     'u:s' => \$unicodemap))
 {
-    &usage(1);
+    &usage(1); # had error
 }
 
 unshift(@idirs,'.');
@@ -578,14 +580,13 @@ if (defined($unicodemap))
 
 if ($PDFver != 1.4 and $PDFver != 1.7)
 {
-    Warn("Only pdf versions 1.4 or 1.7 are supported, not '$PDFver'");
+    Notice("Only pdf versions 1.4 or 1.7 are supported, not '$PDFver'");
     $PDFver=1.7;
 }
 
 $PDFver=int($PDFver*10)-10;
 
 my $reduce_TJ = 1;
-my $reduce_d3 = 1;	# reduces the number of decimal places
 my $prefer_utf16 = 1;	# reduces encoding/decoding by using utf16 as is
 #my $cidfontcmap = 1;	# generate ToUnicode CMap for cidfont
 
@@ -3757,7 +3758,7 @@ sub ParsePDFValue
     my $rtn;
     my $wd=nextwd($pdfwds);
 
-    if ($wd=~m/^\d+$/ and $pdfwds->[0]=~m/^\d+$/ and $pdfwds->[1]=~m/^R(\]|\>|\/)?/)
+    if ($wd=~m/^\d+$/ and $#{$pdfwds}>0 and $pdfwds->[0]=~m/^\d+$/ and $pdfwds->[1]=~m/^R(\]|\>|\/)?/)
     {
 	shift(@{$pdfwds});
 	if (defined($1) and length($1))
@@ -3814,6 +3815,12 @@ sub ParsePDFValue
 	    unshift(@{$pdfwds},$2);
 	    $wd=$1;
 	}
+    }
+
+    if ($wd=~m/(\/.+?)(\/.*)$/)
+    {
+	unshift(@{$pdfwds},$2);
+	$wd=$1;
     }
 
     return($wd);
@@ -3894,7 +3901,7 @@ sub Warn
     unshift(@_, "warning: ");
     my $msg=join('',@_);
     Msg(0,$msg);
-    $xitcd=2;
+    $xitcd=1 if $warnexit;
 }
 
 sub Die
@@ -4171,6 +4178,7 @@ sub LoadFont
 
 	    s/^ +//;
 	    next if $_ eq '';
+	    $stg=-1,last if lc($_) eq 'kernpairs';
 
 	    my (@r)=split;
 	    if ($r[1] eq '"')
@@ -5106,7 +5114,8 @@ sub do_D
 	# Arc : h1 v1 h2 v2
 	$par=substr($par,1);
 	my (@p)=split(' ',$par);
-	my $rad180=3.14159;
+	#my $rad180=3.14159;
+	my $rad180=3.141592653589793;
 	my $rad360=$rad180*2;
 	my $rad90=$rad180/2;
 
@@ -5471,15 +5480,7 @@ sub push_TJ {
 
 sub d3
 {
-    my $d3 = sprintf("%.3f",shift || 0);
-    return $d3 if !$reduce_d3;
-    my ($int, $prec) = split /\./, $d3;
-    $int += 0;
-    if ($prec != 0) {
-	$prec =~ s/0{1,2}$//;
-	return join '.', $int, $prec;
-    }
-    return $int;
+    return(sprintf("%.3f",shift || 0));
 }
 
 sub LoadAhead

@@ -1,0 +1,147 @@
+.\" -*- nroff -*-
+.
+.TH AJ1 7
+.
+.\" ------------------------------------------------------------------
+.SH NAME
+.\" ------------------------------------------------------------------
+.
+aj1 \- Adobe-Japan1 Character Collection
+.
+.ds CW-font CR
+.de CW
+.  if \\n[.$] \{\
+.    rm cw-result
+.    if (\\n[.$] >= 3) .as cw-result \\$3\"
+.    ie '\\*[\\$0-font]'' .ds cw-font \\$0
+.    el .ds cw-font \\*[\\$0-font]
+.    as cw-result \f[\\*[cw-font]]\\$1\f[R]\"
+.    if (\\n[.$] >= 2) .as cw-result \\$2\"
+.    nop \&\\*[cw-result]
+.    rm cw-result
+.    rm cw-font
+.  \}
+..
+.als HR CW
+.
+.\" ------------------------------------------------------------------
+.SH SYNOPSYS
+.\" ------------------------------------------------------------------
+.
+.EX
+.ps -1
+.B make OTFTODIT_OPTS="-c -e aj1.enc -N" -f font-haranoaji.mk clean install
+.B time make aj1.7.pdf  \" with Font::TTF::CFF_::subset(@cids)->as_strings
+.\"real	0m28.058s
+.\"user	0m28.662s
+.\"sys	0m0.291s
+.EE
+.
+.\" ------------------------------------------------------------------
+.SH DESCRIPTION
+.\" ------------------------------------------------------------------
+.
+cid フォントで entity-name として cid を使用します。実験です。
+.
+.IP \(bu 3
+.CW \eN
+エスケープは名前がないグリフや名前で区別するのが難しいグリフを表示する
+ことができます。たとえば、「令和」の合字には
+.CW \e[u32FF]
+（\[u32FF]）と
+.CW \ef(MV\e[u32FF]\efP
+（\f(MV\[u32FF]\fP）
+の2つがあります。
+\eN エスケープで cid が使えるようになると、
+.CW \eN'23058'
+.CW \f(MR\N'23058'\fP ）、 （
+.CW \eN'23059'
+.CW \f(MR\N'23059'\fP ） （
+と書くことができます。
+字体の cid は、たとえば、
+.UR https://github.com/adobe-type-tools/Adobe-Japan1/blob/master/Adobe-Japan1-7.pdf
+Adobe-Japan1-7.pdf
+.UE
+で確認することができます。
+.
+.IP \(bu
+.CW \eN'cid'
+を利用するには、
+.I otftodit
+で
+.MR groff_font 5
+の charset セクションの index 列に entity‐name (cid) を出力します。
+encoding は、通常の text.enc の代りに aj1.enc を指定します。
+.
+.IP \(bu
+試してみると、0行が短くなる。
+表の0行1列の \eN'1' (cid00001, space) は無視される。
+9740行と9760行は長くなります。
+.sp .5
+.PP
+.de nop_rj
+. nop \h'-\w'\\$*'u'\\$*\c
+..
+.de table_Ncids
+.  nr c) \\$1
+.  nr n) 20
+.  ie \\n(.$>=2 .nr d) \\$2
+.  el .nr d) (\\n(c) + \\n(n))
+.
+.  PP
+.  nr m) ((\\n(d) - \\n(c) + \\n(n) - 1) / \\n(n) + 1)
+.  ne \\n(m)
+.  nf
+.  ta 4n
+.
+.\" print header 0 .. \\n(n)
+.  nop \&\t\c
+.  nr i) 0
+.  while (\\n(i) < \\n(n)) \{\
+.    ds h) \s-2\f(CR\\n(i)\fP\s0
+.    nr w) (2n - \\w'\\*(h)' / 2)
+.    nop \&\t\Z'\h'\\n(w)u'\\*(h)'\c
+.    nr i) +1
+.  \}
+.  nop
+.
+.\" print body \\n(c) .. \\n(d)
+.  while (\\n(c) < \\n(d)) \{\c
+.    nop \&\t\c
+.    nop_rj \s-2\f(CR\\n(c)\fP\s0
+.    nr i) 0
+.    ft MR
+.    ps 15p
+.    while ((\\n(i) < \\n(n)) & (\\n(c) < \\n(d))) \{\
+.      nop \&\t\z\\N'\\n(c)'\c
+.      nr c) +1
+.      nr i) +1
+.    \}
+.    ps
+.    ft
+.    nop
+.  \}
+.  fi
+..
+.de table_Ncids_in500incr
+.  nr cid_start \\$1
+.  nr cid_end (\\$2 <? 23060)
+.  while (\\n[cid_start]<\\n[cid_end]) \{\
+.    nr cid_next ((\\n[cid_start] + 500) <? \\n[cid_end])
+.    ne 26
+.    table_Ncids \\n[cid_start] \\n[cid_next]
+.    nr cid_start \\n[cid_next]
+.  \}
+..
+.\" .table_Ncids_in500incr 0 23060
+.table_Ncids_in500incr 0 1000
+.table_Ncids_in500incr 22500 23060
+.ig
+aj1.enc を使用する利点について
+
+.UR https://github.com/adobe-type-tools/Adobe-Japan1/blob/master/Adobe-Japan1-7.pdf
+Adobe-Japan1-7.pdf
+.UE
+.\" Adobe-Japan1-7_ordering.txt
+を原ノ味フォントで作成すると、
+..
