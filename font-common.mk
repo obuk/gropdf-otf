@@ -26,6 +26,7 @@ SUPP_SUFFIX?=	.s
 
 EMBED?=
 SPLIT?=
+FONTM?=
 
 ROPTS?=		-F palt -F liga -F kern
 IOPTS?=		$(ROPTS) -i 50 -m -a 12
@@ -80,8 +81,8 @@ endif
 
 all::	$1$2.download
 $1$2.download: $($1)-$($2).otf $1$2
-	printf "\t%s\t%s\n" `sed -n '/^internalname\s/{s///;p;q}' $1$2` \
-		${EMBED}$$(abspath $$<) >$$@ || rm -f $$@
+	printf "\t%s\t%s\t%s\n" `sed -n '/^internalname\s/{s///;p;q}' $1$2` \
+		${EMBED}$$(abspath $$<) ${FONTM} >$$@ || rm -f $$@
 
 clean-$1$2:
 	rm -f $1$2

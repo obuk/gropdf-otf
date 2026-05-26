@@ -24,7 +24,7 @@ Vagrant.configure("2") do |config|
   # but it doesn't significantly increase make time.
   sudo -u vagrant -i make -C /vagrant clean install
   # 5. make pdf sample
-  sudo -u vagrant -i make -C /vagrant GROPDF_DEBUG=--opt=5 gropdf-otf.7.pdf
+  sudo -u vagrant -i make -C /vagrant GROPDF_DEBUG=-f=5 gropdf-otf.7.pdf
   #sudo -u vagrant -i make -C /vagrant sample
   SHELL
 end

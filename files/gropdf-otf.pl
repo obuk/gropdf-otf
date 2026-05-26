@@ -548,7 +548,8 @@ if (!GetOptions('F=s' => \@fdlist, 'I=s' => \@idirs, 'l' => \$frot,
 }
 
 unshift(@idirs,'.');
-$fd=join('@RT_SEP@',@fdlist) if $#fdlist > -1;
+#$fd=join('@RT_SEP@',@fdlist) if $#fdlist > -1;
+$fd=join($cfg{RT_SEP},@fdlist) if $#fdlist > -1;
 
 &usage(0) if ($want_help);
 

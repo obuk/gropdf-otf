@@ -1,5 +1,4 @@
-
-otftodit:	files/otftodit.pl plenv Encode.cpanm Getopt-Long.cpanm \
+otftodit:	files/otftodit.pl Encode.cpanm Getopt-Long.cpanm Font-TTF.cpanm \
 		fonttools.pip plenv
 ifdef GROFF_FONT
 	sed s,/usr/local/share/groff/current/font,${GROFF_FONT}, $< >/tmp/$@
@@ -9,9 +8,17 @@ else
 	install-pl $< $@
 endif
 
+clean::
+	rm -f Encode.cpanm
+	rm -f Getopt-Long.cpanm
+	rm -f Font-TTF.cpanm
+
 filter-font:	files/filter-font.pl JIS0208.TXT joyo-kanji-code-u.csv \
 		Unicode-Normalize.cpanm Encode.cpanm Getopt-Long.cpanm plenv
 	install-pl $< $@
+
+clean::
+	rm -f Unicode-Normalize.cpanm
 
 merge-download-files: files/merge-download-files.pl Getopt-Long.cpanm plenv
 	install-pl $< $@
@@ -27,5 +34,8 @@ cttc:	files/cttc.pl plenv
 
 mji:	mji.pl Spreadsheet-XLSX.cpanm plenv
 	install-pl $< $@
+
+clean::
+	rm -f Spreadsheet-XLSX.cpanm
 
 tx:	afdko.pip

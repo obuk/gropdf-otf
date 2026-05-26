@@ -11,6 +11,7 @@ LOCAL_BIN?=	/usr/local/bin
 
 Font-TTF?=		https://github.com/obuk/font-ttf.git
 App-grops-prepro?=	https://github.com/obuk/App-grops-prepro.git
+App-gropdf-plus?=	https://github.com/obuk/App-gropdf-plus.git
 
 GROFF_PREFIX?=	${HOME}
 GROFF_BIN?=	${GROFF_PREFIX}/bin

@@ -32,40 +32,17 @@ install::	${GROFF_FONT}/devpdf/DESC gropdf-otf pre-grops
 		esac
 	rm -f /tmp/DESC
 
-GROPDF_OTF_PL?=	gropdf-otf.pl
-gropdf-otf:	${GROPDF_OTF_PL} Inline-C.cpanm Font-TTF.cpanm Unicode-Normalize.cpanm Time-HiRes.cpanm plenv
-	cat $< | perl -w -e '${GROPDF_CFG}' ${GROFF_BIN}/gropdf >/tmp/$@
-	install-pl /tmp/$@
-	rm -f /tmp/$@
+gropdf-otf:	App-gropdf-plus.cpanm Font-TTF.cpanm plenv
 
 clean::
-	rm -f Inline-C.cpanm Font-TTF.cpanm Unicode-Normalize.cpanm Time-HiRes.cpanm
-
-GROFF_GIT?=	http://git.savannah.gnu.org/cgit/groff.git
-GROPDF_HEAD?=	${GROFF_GIT}/plain/src/devices/gropdf/gropdf.pl
-GROPDF_URL?=	${GROPDF_HEAD}?h=deri-gropdf-ng
-#GROPDF_URL?=	${GROPDF_HEAD}?h=deri-gropdf-ng&id=2e6d61716710aaca2fff9bf37747a455afff22a5
-
-gropdf-ng.pl:
-	curl -o $@ -s ${GROPDF_URL}
-
-gropdf.pl:
-	if [ -d groff/.git ]; then \
-	  git -C groff reset --hard; \
-	  cp groff/src/devices/gropdf/gropdf.pl $@; \
-	fi
-
-clean::
-	rm -f gropdf-ng.pl
-	rm -f gropdf.pl
-
+	rm -f App-gropdf-plus.cpanm
+	rm -f Font-TTF.cpanm
 
 pre-grops:	App-grops-prepro.cpanm
 	[ -x `which $@` ]
 
 clean::
 	rm -f App-grops-prepro.cpanm
-
 
 pyftsubset:	fonttools.pip
 	[ -x `which $@` ]

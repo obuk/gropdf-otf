@@ -17,18 +17,19 @@ my $download_file = shift @ARGV;
 my %download;
 while (<>) {
   chop;
-  my (undef, $font, $filename) = split "\t";
-  $download{"${FOUNDRY}\t$font"} = $filename;
+  my (undef, $font, $filename, $module) = split "\t";
+  $download{"${FOUNDRY}\t$font"} = join "\t", $filename, $module // "";
 }
 my %seen;
 if (open DOWNLOAD, $download_file) {
   while (<DOWNLOAD>) {
     chop;
     if (/^[^\x23]/) {
-      my ($foundry, $font, $filename) = split "\t";
+      my ($foundry, $font, $filename, $module) = split "\t";
       if ($font && $filename) {
         $seen{my $ff = "$foundry\t$font"}++;
-        $_ = join "\t", $foundry, $font, $download{$ff} // $filename;
+        $_ = join "\t", $foundry, $font, $download{$ff} //
+          join "\t", $filename, $module // "";
       }
     }
     say;

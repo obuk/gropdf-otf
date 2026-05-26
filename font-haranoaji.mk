@@ -11,6 +11,7 @@ M?=	HaranoAjiMincho
 G?=	HaranoAjiGothic
 EMBED?=
 FOUNDRY?=
+FONTM?=	OpenType
 
 R?=	Regular
 B?=	Bold

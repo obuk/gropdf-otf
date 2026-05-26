@@ -12,6 +12,7 @@ M?=	NotoSerifCJK${CN}
 G?=	NotoSansCJK${CN}
 EMBED?=	*
 FOUNDRY?=
+FONTM?=	OpenType
 
 R?=	Regular
 B?=	Bold
