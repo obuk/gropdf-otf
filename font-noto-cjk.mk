@@ -5,7 +5,6 @@ include Mk/*.mk
 
 # override C (experimental)
 FAM?=	M G
-STY?=	R I B BI
 CN?=	jp
 jp=	0
 M?=	NotoSerifCJK${CN}

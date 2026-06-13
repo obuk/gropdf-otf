@@ -34,6 +34,10 @@ install::	${GROFF_FONT}/devpdf/DESC gropdf-otf pre-grops
 
 gropdf-otf:	App-gropdf-plus.cpanm Font-TTF.cpanm plenv
 
+	#cat `which gropdf-otf` | perl -w -e '${GROPDF_CFG}' ${GROFF_BIN}/gropdf >/tmp/$@
+	#install-pl /tmp/$@
+	#rm -f /tmp/$@
+
 clean::
 	rm -f App-gropdf-plus.cpanm
 	rm -f Font-TTF.cpanm

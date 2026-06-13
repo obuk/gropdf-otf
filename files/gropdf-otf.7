@@ -86,47 +86,14 @@ BI	太字・斜体・横書	BIV	太字・斜体・縦書
 .in
 .
 .\" ------------------------------------------------------------------
-.SS FOUNDRY の指定とフォントの埋め込み
+.SS FOUNDRY とフォントの埋め込み
 .\" ------------------------------------------------------------------
 .
 .MR gropdf 1
-はオプション \-y でフォントを選択できます
-（本来は、同じフォントの異なるバージョンを選択する仕組み）。
-.
-たとえば、Noto フォントは、ubuntu では日本語フォントとしてインストールされ、
-fonts-conf も設定されます。
-従って、オプション \-y で Noto フォントを指定すれば、
-埋め込まなくても表示できる可能性があります。
-.
-.PP
-原ノ味フォントは、
-基本的には源ノフォントを Adobe-Japan1 に組み替えたものですが、
-縦書のグリフが修正されています（詳細は、
-.UR https://github.com/trueroad/HaranoAjiFonts
-原ノ味フォントの説明
-.UE を
-参照のこと）。
-たとえば、
-.HR 〝シャヴァス探偵事務所〞
-の縦書は、
-.
-.sp .3
-.RS +2
-.vs (\n[.s]p * 150 / 100)u
-.rs
-.TS
-tab(;);
-l l lw(40).
-\f[X-GIV]〝シャヴァス探偵事務所〞\fP;Noto フォント;\
-ダブルミニュートが正しく表示されませんが、
-\f[GIV]〝シャヴァス探偵事務所〞\fP;原ノ味フォント;\
-\h'3m'〃\h'5.5m'表示されます。
-.TE
-.vs
-.RE
-.PP
-以上を考慮して、次のようにインストールします。
-（オプション \-yN で Noto フォントも試せます。)
+は FOUNDRY を選択できます。
+この box では、デフォルトで原ノ味フォント、
+オプション \-yN で Noto を選択するように、
+下表のとおりインストールします。
 .
 .RS +2
 .rs
@@ -141,34 +108,42 @@ _
 ;yes;G;R I B BI V IV BV BIV;HaranoAjiGothic-{Regular,Bold}
 ;yes;GM;R I B BI;HaranoAjiGothic-{Regular,Bold}
 _
-N;no;M;R I B BI;NotoSerifCJKjp-{Regular,Bold}
-N;no;G;R I B BI;NotoSansCJKjp-{Regular,Bold}
+N;no;M;R I B BI V IV BV BIV;NotoSerifCJKjp-{Regular,Bold}
+N;no;G;R I B BI V IV BV BIV;NotoSansCJKjp-{Regular,Bold}
 N;no;GM;R I B BI;NotoSansCJKjp-{Regular,Bold}
 .TE
 .vs
 .RE
 .
-.ig
-.PD 0
-.IP \(bu 3
-原ノ味フォントで埋め込みを止める場合は、利用者が
-.UR https://www.freedesktop.org/software/fontconfig/fontconfig-user.html
-fonts-conf
-.UE
-を設定する必要があります。
-.\" 更に download ファイル中のパスの先頭に * を置きます。
+.PP
+埋め込みは download ファイルでフォントごとに設定します。
+作成される PDF サイズを比較してみましょう。
 .
-.IP \(bu 3
-man \-Tpdf の中で gropdf が実行され、
-pyftsubset を使用してサブセットフォントを作成するとき、
-Fatal Python error: init_fs_encoding: ...
-というメッセージが出力されることがあります。
-対処として、
-.UR https://github.com/obuk/font-ttf
-Font::TTF
-.UE
-に同様の機能を追加しました。
-..
+.EX
+$ \c
+.B man -Tpdf groff.7 >a.pdf; wc -c a.pdf \c
+# 原ノ味フォント
+289831 a.pdf
+$ \c
+.B MANROFFOPT=-P-yN man -Tpdf groff.7 >a.pdf; wc -c a.pdf \c
+# Noto フォント
+118111 a.pdf
+.EE
+.
+.PP
+しかし、合字、異体字、GSUB で置換されたグリフ
+（/ToUnicode CMap では表示が難しい）は埋め込みます。
+.
+.EX
+$ \c
+.B echo \[dq]\ef[GIV]\&〝シャヴァス探偵事務所〞\&\efP\[dq] | groff -P-yN -Tpdf -mja -k >a.pdf
+$ \c
+.B pdffonts a.pdf
+name                          type        encoding   emb sub uni obj ID
+----------------------------- ----------- ---------- --- --- --- ------
+LGCKRF+NotoSerifCJKjp-Regular CID Type 0C Identity-V yes yes yes   7  0
+NotoSerifCJKjp-Regular        CID Type 0  Identity-V no  no  yes  12  0
+.EE
 .
 .ig end-of-experiment
 .\" ------------------------------------------------------------------

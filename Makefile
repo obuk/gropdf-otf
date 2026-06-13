@@ -87,10 +87,6 @@ L?=	ja
 		-mandoc - > $@ \
 	&& cp $@ a.pdf
 
-gropdf-otf.7.pdf:	X-GIV
-X-GIV:
-	make -f font-noto-cjk.mk FOUNDRY=X FAM=G STY=IV clean install
-
 FORCE:
 
 clean::
